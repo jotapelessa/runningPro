@@ -12,6 +12,7 @@ import PlanTab from './components/PlanTab';
 import RecoveryTab from './components/RecoveryTab';
 import RacesTab from './components/RacesTab';
 import GuideTab from './components/GuideTab';
+import WorkoutImporter from './components/WorkoutImporter';
 import CoachChat from './components/CoachChat';
 import AthleteModal from './components/AthleteModal';
 import { 
@@ -26,8 +27,10 @@ import {
   X,
   ClipboardList,
   ChevronRight,
-  BookOpen
+  BookOpen,
+  Watch
 } from 'lucide-react';
+import { ParsedWorkout } from './lib/gpxParser';
 
 export default function App() {
   // Initialize with exact example data from instructions:
@@ -48,7 +51,7 @@ export default function App() {
     goal: 'Completar meus primeiros 5k de forma confortável.'
   });
 
-  const [activeTab, setActiveTab] = useState<'calculator' | 'plan' | 'predictor' | 'recovery' | 'races' | 'guide'>('guide');
+  const [activeTab, setActiveTab] = useState<'calculator' | 'plan' | 'predictor' | 'recovery' | 'races' | 'guide' | 'import'>('guide');
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
 
@@ -170,6 +173,18 @@ export default function App() {
             </button>
 
             <button
+              onClick={() => setActiveTab('import')}
+              className={`flex items-center space-x-2 px-5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition duration-150 cursor-pointer ${
+                activeTab === 'import' 
+                  ? 'bg-[#FF4E00] text-black shadow-[0_0_15px_rgba(255,78,0,0.35)]' 
+                  : 'text-white/60 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <Watch className="w-4 h-4" />
+              <span>Importar Relógio (Amazfit)</span>
+            </button>
+
+            <button
               onClick={() => setActiveTab('calculator')}
               className={`flex items-center space-x-2 px-5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition duration-150 cursor-pointer ${
                 activeTab === 'calculator' 
@@ -263,6 +278,30 @@ export default function App() {
               <RecoveryTab 
                 runnerState={runnerState}
                 onUpdatePains={handleUpdatePains}
+              />
+            )}
+            {activeTab === 'import' && (
+              <WorkoutImporter 
+                runnerState={runnerState}
+                onApplyWorkout={(w) => {
+                  setRunnerState(prev => ({
+                    ...prev,
+                    currentVdot: w.calculatedVDOT,
+                    macHR: w.maxHeartRate && w.maxHeartRate > 100 ? w.maxHeartRate : prev.macHR,
+                    history: [
+                      {
+                        id: Date.now().toString(),
+                        date: new Date().toLocaleDateString('pt-BR'),
+                        type: 'vdot_direct',
+                        value: w.calculatedVDOT,
+                        vo2max: Math.round(w.calculatedVDOT * 1.02 * 10) / 10,
+                        vdot: w.calculatedVDOT
+                      },
+                      ...prev.history
+                    ]
+                  }));
+                  setActiveTab('calculator');
+                }}
               />
             )}
             {activeTab === 'races' && (
