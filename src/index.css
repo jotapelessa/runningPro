@@ -1,0 +1,56 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;650;700;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  /* Custom Neon Orange elements for VDOT accent */
+  --color-vdot-orange: #FF4E00;
+  --color-vdot-orange-hover: #E03E00;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: #050505;
+  color: #E0E0E0;
+}
+
+/* Ensure clean input visual overrides globally for form fields */
+input, select, textarea {
+  background-color: #0A0A0A !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: #FFFFFF !important;
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: #FF4E00 !important;
+  box-shadow: 0 0 10px rgba(255, 78, 0, 0.35) !important;
+  outline: none !important;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #050505;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #FF4E00;
+}
+
+/* Additional visual details */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
