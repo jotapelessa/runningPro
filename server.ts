@@ -126,7 +126,153 @@ ${isTransition ? `2. DIRETRIZ FUNDAMENTAL PARA INICIANTES/SEDENTÁRIOS:
   }
 });
 
-// 3. Race Scraper / Catalog Search endpoint
+// 3. Google OAuth & Fitness Endpoints (Server-Side)
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
+
+// Store athlete's Google tokens in memory / persistent store
+let athleteGoogleTokens: { access_token?: string; refresh_token?: string; expiry_date?: number; email?: string } = {};
+
+// 3.1 Generate Google Auth URL with oob / manual authorization code support
+app.get("/api/auth/google/url", (req, res) => {
+  const scopes = [
+    'https://www.googleapis.com/auth/userinfo.email',
+    'https://www.googleapis.com/auth/userinfo.profile',
+    'https://www.googleapis.com/auth/fitness.activity.read',
+    'https://www.googleapis.com/auth/fitness.location.read',
+    'https://www.googleapis.com/auth/fitness.body.read'
+  ].join(' ');
+
+  // Use postmessage or custom redirect for manual token exchange
+  const redirectUri = (req.query.redirectUri as string) || 'urn:ietf:wg:oauth:2.0:oob';
+
+  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+    `client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}` +
+    `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+    `&response_type=code` +
+    `&scope=${encodeURIComponent(scopes)}` +
+    `&access_type=offline` +
+    `&prompt=consent`;
+
+  res.json({ url: authUrl, clientId: GOOGLE_CLIENT_ID, redirectUri });
+});
+
+// 3.2 Exchange Authorization Code for Refresh Token & Access Token
+app.post("/api/auth/google/exchange", async (req, res) => {
+  try {
+    const { code, redirectUri } = req.body;
+    if (!code) {
+      return res.status(400).json({ error: "Código de autorização não informado." });
+    }
+
+    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code: code.trim(),
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        redirect_uri: redirectUri || 'urn:ietf:wg:oauth:2.0:oob',
+        grant_type: "authorization_code"
+      })
+    });
+
+    const tokenData = await tokenResponse.json();
+    if (!tokenResponse.ok) {
+      console.error("Google Token Exchange error:", tokenData);
+      return res.status(tokenResponse.status).json({ 
+        error: tokenData.error_description || tokenData.error || "Falha na troca do código OAuth." 
+      });
+    }
+
+    // Get user info
+    let userEmail = 'Atleta Google';
+    let userName = 'Atleta';
+    try {
+      const userInfoRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+        headers: { Authorization: `Bearer ${tokenData.access_token}` }
+      });
+      if (userInfoRes.ok) {
+        const userInfo = await userInfoRes.json();
+        userEmail = userInfo.email || userEmail;
+        userName = userInfo.name || userName;
+      }
+    } catch (e) {
+      console.warn("Could not fetch user profile details:", e);
+    }
+
+    athleteGoogleTokens = {
+      access_token: tokenData.access_token,
+      refresh_token: tokenData.refresh_token,
+      expiry_date: Date.now() + (tokenData.expires_in || 3600) * 1000,
+      email: userEmail
+    };
+
+    return res.json({
+      success: true,
+      email: userEmail,
+      name: userName,
+      hasRefreshToken: Boolean(tokenData.refresh_token)
+    });
+  } catch (error: any) {
+    console.error("Exchange endpoint error:", error);
+    res.status(500).json({ error: error?.message || "Erro interno no servidor." });
+  }
+});
+
+// 3.3 Fetch Google Fitness Activities & Sessions
+app.get("/api/fitness/activities", async (req, res) => {
+  try {
+    if (!athleteGoogleTokens.access_token) {
+      return res.status(401).json({ error: "Nenhuma conta Google conectada no backend." });
+    }
+
+    // If access token is expired and we have refresh token, refresh it
+    if (athleteGoogleTokens.expiry_date && Date.now() > athleteGoogleTokens.expiry_date && athleteGoogleTokens.refresh_token) {
+      const refreshRes = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          refresh_token: athleteGoogleTokens.refresh_token,
+          client_id: GOOGLE_CLIENT_ID,
+          client_secret: GOOGLE_CLIENT_SECRET,
+          grant_type: "refresh_token"
+        })
+      });
+      if (refreshRes.ok) {
+        const refreshData = await refreshRes.json();
+        athleteGoogleTokens.access_token = refreshData.access_token;
+        athleteGoogleTokens.expiry_date = Date.now() + (refreshData.expires_in || 3600) * 1000;
+      }
+    }
+
+    // Call Google Fitness REST API Sessions endpoint
+    const now = Date.now();
+    const oneMonthAgo = now - 30 * 24 * 60 * 60 * 1000;
+    const fitnessUrl = `https://fitness.googleapis.com/fitness/v1/users/me/sessions?startTime=${new Date(oneMonthAgo).toISOString()}&endTime=${new Date(now).toISOString()}`;
+
+    const fitResponse = await fetch(fitnessUrl, {
+      headers: { Authorization: `Bearer ${athleteGoogleTokens.access_token}` }
+    });
+
+    if (!fitResponse.ok) {
+      const errData = await fitResponse.json();
+      return res.status(fitResponse.status).json({ error: errData.error?.message || "Erro ao consultar Google Fitness." });
+    }
+
+    const fitData = await fitResponse.json();
+    return res.json({
+      success: true,
+      sessions: fitData.session || [],
+      email: athleteGoogleTokens.email
+    });
+  } catch (error: any) {
+    console.error("Fitness fetch error:", error);
+    res.status(500).json({ error: error?.message || "Falha ao puxar sessões do Google Fit." });
+  }
+});
+
+// 4. Race Scraper / Catalog Search endpoint
 app.post("/api/scrape-races", async (req, res) => {
   try {
     const { query, stateCode, distance } = req.body;
