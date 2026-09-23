@@ -17,10 +17,13 @@ import {
   Heart,
   AlertTriangle,
   HeartHandshake,
-  ArrowRight
+  ArrowRight,
+  Trophy,
+  X
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { DistanceType, RunnerState, TestRecord } from '../types';
+import { TransitionLadderView } from './TransitionLadderView';
 import { 
   STANDARD_DISTANCES, 
   calculateVDOT, 
@@ -69,6 +72,9 @@ export const VdotCalculatorTab: React.FC<VdotCalculatorTabProps> = ({
   const [tempC, setTempC] = useState<number>(20);
   const [humidityPct, setHumidityPct] = useState<number>(55);
   const [altitudeM, setAltitudeM] = useState<number>(600);
+
+  // Transition Ladder Modal
+  const [isLadderModalOpen, setIsLadderModalOpen] = useState<boolean>(false);
 
   // Success indicator for saving
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
@@ -211,14 +217,24 @@ export const VdotCalculatorTab: React.FC<VdotCalculatorTabProps> = ({
               <Flame className="w-4 h-4 text-emerald-400 flex-shrink-0" />
               <span>{readiness.coachRecommendation}</span>
             </div>
-            <button
-              onClick={() => {
-                onUpdateRunnerState({ level: 'beginner', isCalibrated: true, currentVdot: 32 });
-              }}
-              className="text-[11px] text-slate-400 hover:text-emerald-300 underline underline-offset-4 cursor-pointer whitespace-nowrap self-end sm:self-auto"
-            >
-              Já consigo correr 3 km contínuos (Desbloquear VDOT agora)
-            </button>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={() => setIsLadderModalOpen(true)}
+                className="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-heading font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+              >
+                <Trophy className="w-3.5 h-3.5" />
+                Ver Escada de Prontidão (Marcos)
+              </button>
+              <button
+                onClick={() => {
+                  onUpdateRunnerState({ level: 'beginner', isCalibrated: true, currentVdot: 32 });
+                }}
+                className="text-[11px] text-slate-400 hover:text-emerald-300 underline underline-offset-4 cursor-pointer whitespace-nowrap self-end sm:self-auto"
+              >
+                Já consigo correr 3 km contínuos (Desbloquear VDOT agora)
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -813,6 +829,44 @@ export const VdotCalculatorTab: React.FC<VdotCalculatorTabProps> = ({
           ))}
         </div>
       </div>
+
+      {/* Transition Ladder Modal */}
+      {isLadderModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/85 backdrop-blur-md animate-fadeIn">
+          <div className="relative w-full max-w-4xl max-h-[90vh] bg-[#0E0E10] border border-emerald-500/30 rounded-2xl overflow-y-auto p-4 sm:p-6 shadow-2xl shadow-emerald-500/10">
+            <div className="flex items-center justify-between pb-4 border-b border-white/10 mb-6">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  <Trophy className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white font-heading">
+                    Escada de Prontidão Biológica & Transição
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Marcos de proteção fisiológica para o método Caminha-Corre (Run-Walk)
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsLadderModalOpen(false)}
+                className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <TransitionLadderView
+              runnerState={runnerState}
+              onUpdateRunnerState={onUpdateRunnerState}
+              onOpenAthleteModal={() => {
+                setIsLadderModalOpen(false);
+                onOpenAthleteModal();
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
