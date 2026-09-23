@@ -143,8 +143,8 @@ app.get("/api/auth/google/url", (req, res) => {
     'https://www.googleapis.com/auth/fitness.body.read'
   ].join(' ');
 
-  // Use postmessage or custom redirect for manual token exchange
-  const redirectUri = (req.query.redirectUri as string) || 'urn:ietf:wg:oauth:2.0:oob';
+  // Default to http://localhost:3005 for Google Web Client OAuth
+  const redirectUri = (req.query.redirectUri as string) || 'http://localhost:3005';
 
   const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
     `client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}` +
@@ -172,7 +172,7 @@ app.post("/api/auth/google/exchange", async (req, res) => {
         code: code.trim(),
         client_id: GOOGLE_CLIENT_ID,
         client_secret: GOOGLE_CLIENT_SECRET,
-        redirect_uri: redirectUri || 'urn:ietf:wg:oauth:2.0:oob',
+        redirect_uri: redirectUri || 'http://localhost:3005',
         grant_type: "authorization_code"
       })
     });
