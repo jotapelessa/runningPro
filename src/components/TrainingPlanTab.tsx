@@ -17,8 +17,7 @@ import {
   Watch,
   UploadCloud
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
-import { DailyWorkout, TrainingPlan, TrainingWeek, RunnerState, ParsedWorkout } from '../types';
+import { DailyWorkout, TrainingPlan, TrainingWeek, RunnerState, ParsedWorkout, UserActivity } from '../types';
 import { generateEightWeekPlan } from '../lib/planGenerator';
 import { generateRunWalkPlan, RUN_WALK_SCHEDULE } from '../lib/runWalkEngine';
 import { parseUniversalWorkoutFile } from '../lib/workoutParser';
@@ -32,6 +31,8 @@ interface TrainingPlanTabProps {
   onOpenAthleteModal: () => void;
   onUpdateRunnerState?: (updatedFields: Partial<RunnerState>) => void;
   onApplyWorkout?: (workout: ParsedWorkout) => void;
+  activities?: UserActivity[];
+  onUpdateActivities?: (activities: UserActivity[]) => void;
 }
 
 
@@ -41,7 +42,9 @@ export const TrainingPlanTab: React.FC<TrainingPlanTabProps> = ({
   onUpdatePlan,
   onOpenAthleteModal,
   onUpdateRunnerState,
-  onApplyWorkout
+  onApplyWorkout,
+  activities,
+  onUpdateActivities
 }) => {
   const isTransitionUser = runnerState.level === 'sedentary_transition' || runnerState.activityProfile === 'sedentary';
   const isUncalibrated = !isTransitionUser && (runnerState.isCalibrated === false || (runnerState.currentVdot || 0) <= 0);
@@ -420,6 +423,8 @@ export const TrainingPlanTab: React.FC<TrainingPlanTabProps> = ({
           }}
           onUpdateRunnerState={onUpdateRunnerState}
           onUploadWorkout={onApplyWorkout}
+          activities={activities}
+          onUpdateActivities={onUpdateActivities}
         />
       ) : (
         <>

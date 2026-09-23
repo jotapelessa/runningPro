@@ -309,6 +309,8 @@ export default function App() {
                 onOpenAthleteModal={() => setIsAthleteModalOpen(true)}
                 onUpdateRunnerState={handleUpdateRunnerState}
                 onApplyWorkout={handleApplyWorkout}
+                activities={activities}
+                onUpdateActivities={handleUpdateActivities}
               />
 
             </motion.div>
