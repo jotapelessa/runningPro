@@ -102,32 +102,35 @@ ${isTransition ? `3. DIRETRIZ FUNDAMENTAL PARA INICIANTES/SEDENTÁRIOS:
       promptText = userPrompt || "Olá treinador, como posso melhorar minha performance?";
     }
 
-    let response;
-    try {
-      response = await ai.models.generateContent({
-        model: "gemini-3.8-flash",
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: `${systemInstruction}\n\n--- HISTÓRICO DA CONVERSA / PERGUNTA ATUAL ---\n${promptText}` }],
-          }
-        ],
-      });
-    } catch (primaryModelErr: any) {
-      console.warn("Primary model error, attempting gemini-3.6-flash fallback:", primaryModelErr?.message);
-      response = await ai.models.generateContent({
-        model: "gemini-3.6-flash",
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: `${systemInstruction}\n\n--- HISTÓRICO DA CONVERSA / PERGUNTA ATUAL ---\n${promptText}` }],
-          }
-        ],
-      });
+    const candidateModels = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-3.8-flash"];
+    let response: any = null;
+    let usedModel = "";
+
+    for (const model of candidateModels) {
+      try {
+        response = await ai.models.generateContent({
+          model,
+          contents: [
+            {
+              role: "user",
+              parts: [{ text: `${systemInstruction}\n\n--- HISTÓRICO DA CONVERSA / PERGUNTA ATUAL ---\n${promptText}` }],
+            }
+          ],
+        });
+        if (response && response.text) {
+          usedModel = model;
+          break;
+        }
+      } catch (mErr: any) {
+        console.warn(`Model ${model} unavailable: ${mErr?.message}`);
+      }
     }
 
-    const replyText = response.text || "Não foi possível gerar resposta no momento.";
-    return res.json({ text: replyText, source: "gemini-flash" });
+    if (!response || !response.text) {
+      throw new Error("No Gemini models responded successfully");
+    }
+
+    return res.json({ text: response.text, source: usedModel });
   } catch (error: any) {
     console.error("Coach API error:", error);
     // Graceful fallback to local engine
@@ -214,11 +217,14 @@ ${isTransition ? `3. DIRETRIZ FUNDAMENTAL PARA INICIANTES/SEDENTÁRIOS:
     promptText = userPrompt || "Olá treinador, como posso melhorar minha performance?";
   }
 
-  try {
-    let streamResult;
+  const candidateModels = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-3.8-flash"];
+  let streamResult: any = null;
+  let usedModel = "";
+
+  for (const model of candidateModels) {
     try {
       streamResult = await ai.models.generateContentStream({
-        model: "gemini-3.8-flash",
+        model,
         contents: [
           {
             role: "user",
@@ -226,17 +232,18 @@ ${isTransition ? `3. DIRETRIZ FUNDAMENTAL PARA INICIANTES/SEDENTÁRIOS:
           }
         ],
       });
+      if (streamResult) {
+        usedModel = model;
+        break;
+      }
     } catch (e: any) {
-      console.warn("Primary stream model failed, attempting gemini-3.6-flash fallback:", e?.message);
-      streamResult = await ai.models.generateContentStream({
-        model: "gemini-3.6-flash",
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: `${systemInstruction}\n\n--- HISTÓRICO DA CONVERSA / PERGUNTA ATUAL ---\n${promptText}` }],
-          }
-        ],
-      });
+      console.warn(`Stream model ${model} unavailable: ${e?.message}`);
+    }
+  }
+
+  try {
+    if (!streamResult) {
+      throw new Error("No Gemini models responded to streaming request");
     }
 
     for await (const chunk of streamResult) {
@@ -245,7 +252,7 @@ ${isTransition ? `3. DIRETRIZ FUNDAMENTAL PARA INICIANTES/SEDENTÁRIOS:
         sendEvent("chunk", { text: chunkText });
       }
     }
-    sendEvent("done", { source: "gemini-flash" });
+    sendEvent("done", { source: usedModel || "gemini-flash" });
   } catch (err: any) {
     console.error("Coach stream error, sending local fallback:", err);
     const fallbackResponse = generateLocalCoachAdvice(userPrompt || "orientação", runnerState);
