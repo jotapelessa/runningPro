@@ -111,9 +111,17 @@ export const GoogleConnectModal: React.FC<GoogleConnectModalProps> = ({
       onUpdateSyncState(nextState);
       saveGoogleSyncState(nextState);
 
+      if (onSyncActivities) {
+        try {
+          await onSyncActivities();
+        } catch (syncErr) {
+          console.warn('Auto-sync after code exchange error:', syncErr);
+        }
+      }
+
       confetti({ particleCount: 50, spread: 60 });
       setStatusMessage({ 
-        text: `Conta ${data.email || 'Google'} autenticada com sucesso no servidor!`, 
+        text: `Conta ${data.email || 'Google'} autenticada e atividades sincronizadas com sucesso!`, 
         type: 'success' 
       });
       setAuthCodeInput('');

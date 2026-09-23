@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import { GoogleGenAI } from "@google/genai";
@@ -130,8 +131,26 @@ ${isTransition ? `2. DIRETRIZ FUNDAMENTAL PARA INICIANTES/SEDENTÁRIOS:
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
 
-// Store athlete's Google tokens in memory / persistent store
+// Store athlete's Google tokens in persistent JSON file on disk
+const TOKENS_FILE = path.join(__dirname, '.google_tokens.json');
 let athleteGoogleTokens: { access_token?: string; refresh_token?: string; expiry_date?: number; email?: string } = {};
+
+try {
+  if (fs.existsSync(TOKENS_FILE)) {
+    athleteGoogleTokens = JSON.parse(fs.readFileSync(TOKENS_FILE, 'utf-8'));
+  }
+} catch (e) {
+  console.warn('Could not read persistent tokens file:', e);
+}
+
+function saveGoogleTokens(tokens: typeof athleteGoogleTokens) {
+  athleteGoogleTokens = tokens;
+  try {
+    fs.writeFileSync(TOKENS_FILE, JSON.stringify(tokens, null, 2), 'utf-8');
+  } catch (e) {
+    console.error('Error saving persistent tokens file:', e);
+  }
+}
 
 // 3.1 Generate Google Auth URL with oob / manual authorization code support
 app.get("/api/auth/google/url", (req, res) => {
@@ -201,12 +220,12 @@ app.post("/api/auth/google/exchange", async (req, res) => {
       console.warn("Could not fetch user profile details:", e);
     }
 
-    athleteGoogleTokens = {
+    saveGoogleTokens({
       access_token: tokenData.access_token,
       refresh_token: tokenData.refresh_token,
       expiry_date: Date.now() + (tokenData.expires_in || 3600) * 1000,
       email: userEmail
-    };
+    });
 
     return res.json({
       success: true,
@@ -241,8 +260,11 @@ app.get("/api/fitness/activities", async (req, res) => {
       });
       if (refreshRes.ok) {
         const refreshData = await refreshRes.json();
-        athleteGoogleTokens.access_token = refreshData.access_token;
-        athleteGoogleTokens.expiry_date = Date.now() + (refreshData.expires_in || 3600) * 1000;
+        saveGoogleTokens({
+          ...athleteGoogleTokens,
+          access_token: refreshData.access_token,
+          expiry_date: Date.now() + (refreshData.expires_in || 3600) * 1000
+        });
       }
     }
 
