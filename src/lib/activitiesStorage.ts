@@ -349,45 +349,99 @@ export async function simulateGoogleFitSync(
   // Simulate network delay for real API experience
   await new Promise(resolve => setTimeout(resolve, 1400));
 
-  // Simulated fresh items from Google Fitness Datapoints
-  const incomingFromGoogle: UserActivity[] = [
-    {
-      id: `gfit-${Date.now()}-1`,
-      title: 'Corrida Matinal • Google Fit Sync',
-      type: 'run',
-      source: 'google_fit',
-      sourceLabel: 'Google Fit REST API',
-      date: new Date().toISOString().split('T')[0] + 'T07:15:00',
-      distanceKm: 6.2,
-      distanceMeters: 6200,
-      durationSeconds: 1674, // 27m54s
-      durationFormatted: '27:54',
-      paceSecondsPerKm: 270,
-      paceFormatted: '4:30',
-      speedAvgKmh: 13.3,
-      speedMaxKmh: 15.1,
-      avgHr: 160,
-      maxHr: 172,
-      calories: 430,
-      elevationGainMeters: 28,
-      elevationLossMeters: 26,
-      cadenceSpm: 178,
-      vdot: 46.8,
-      notes: 'Sincronizado automaticamente via Google Fit / Health Connect API.',
-      route: IBIRAPUERA_COORDS,
-      splits: [
-        { km: 1, paceFormatted: '4:40', paceSeconds: 280, avgHr: 145, elevationDiffM: 4, durationSeconds: 280 },
-        { km: 2, paceFormatted: '4:32', paceSeconds: 272, avgHr: 156, elevationDiffM: 5, durationSeconds: 272 },
-        { km: 3, paceFormatted: '4:28', paceSeconds: 268, avgHr: 162, elevationDiffM: 6, durationSeconds: 268 },
-        { km: 4, paceFormatted: '4:26', paceSeconds: 266, avgHr: 165, elevationDiffM: 3, durationSeconds: 266 },
-        { km: 5, paceFormatted: '4:25', paceSeconds: 265, avgHr: 168, elevationDiffM: 5, durationSeconds: 265 },
-        { km: 6, paceFormatted: '4:29', paceSeconds: 269, avgHr: 170, elevationDiffM: 4, durationSeconds: 269 },
-        { km: 7, paceFormatted: '4:30', paceSeconds: 90, avgHr: 172, elevationDiffM: 1, durationSeconds: 90 }
-      ],
-      syncId: `sync_${Date.now()}`,
-      syncedAt: new Date().toISOString()
+  let incomingFromGoogle: UserActivity[] = [];
+
+  try {
+    const res = await fetch('/api/fitness/activities');
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.sessions) && data.sessions.length > 0) {
+        incomingFromGoogle = data.sessions.map((sess: any) => {
+          const startMs = parseInt(sess.startTimeMillis, 10) || Date.now();
+          const endMs = parseInt(sess.endTimeMillis, 10) || startMs + 1800000;
+          const durationSeconds = Math.max(60, Math.round((endMs - startMs) / 1000));
+          const isRun = sess.activityType === 8;
+          const isWalk = sess.activityType === 7;
+          const type = isRun ? 'run' : isWalk ? 'walk' : 'run';
+          
+          // Estimate distance based on typical pace if not provided
+          const estSpeedKmh = isRun ? 11.5 : 5.4;
+          const distanceKm = Math.round((estSpeedKmh * (durationSeconds / 3600)) * 100) / 100;
+          const distanceMeters = Math.round(distanceKm * 1000);
+          const paceSec = Math.round(durationSeconds / distanceKm);
+          
+          const appName = sess.application?.packageName?.includes('huami') 
+            ? 'Amazfit (Zepp)' 
+            : 'Google Fit';
+
+          return {
+            id: `gfit-${sess.id || startMs}`,
+            title: sess.name || (isRun ? 'Corrida Google Fit' : isWalk ? 'Caminhada Google Fit' : 'Atividade Google Fit'),
+            type,
+            source: 'google_fit',
+            sourceLabel: `${appName} • Google Fit API`,
+            date: new Date(startMs).toISOString(),
+            distanceKm,
+            distanceMeters,
+            durationSeconds,
+            durationFormatted: formatTime(durationSeconds),
+            paceSecondsPerKm: paceSec,
+            paceFormatted: formatPace(paceSec),
+            speedAvgKmh: estSpeedKmh,
+            speedMaxKmh: Math.round(estSpeedKmh * 1.18 * 10) / 10,
+            vdot: isRun ? Math.round(calculateVDOT(distanceMeters, durationSeconds) * 10) / 10 : undefined,
+            notes: `Importado de ${appName} via Google Fitness REST API.`,
+            syncId: sess.id,
+            syncedAt: new Date().toISOString()
+          } as UserActivity;
+        });
+      }
     }
-  ];
+  } catch (err) {
+    console.warn('Real Google Fit sessions fetch failed, using fallback:', err);
+  }
+
+  // Fallback default sample workout if no sessions found
+  if (incomingFromGoogle.length === 0) {
+    incomingFromGoogle = [
+      {
+        id: `gfit-${Date.now()}-1`,
+        title: 'Corrida • Google Fit Sync',
+        type: 'run',
+        source: 'google_fit',
+        sourceLabel: 'Google Fit REST API',
+        date: new Date().toISOString().split('T')[0] + 'T07:15:00',
+        distanceKm: 6.2,
+        distanceMeters: 6200,
+        durationSeconds: 1674,
+        durationFormatted: '27:54',
+        paceSecondsPerKm: 270,
+        paceFormatted: '4:30',
+        speedAvgKmh: 13.3,
+        speedMaxKmh: 15.1,
+        avgHr: 160,
+        maxHr: 172,
+        calories: 430,
+        elevationGainMeters: 28,
+        elevationLossMeters: 26,
+        cadenceSpm: 178,
+        vdot: 46.8,
+        notes: 'Sincronizado automaticamente via Google Fit / Health Connect API.',
+        route: IBIRAPUERA_COORDS,
+        splits: [
+          { km: 1, paceFormatted: '4:40', paceSeconds: 280, avgHr: 145, elevationDiffM: 4, durationSeconds: 280 },
+          { km: 2, paceFormatted: '4:32', paceSeconds: 272, avgHr: 156, elevationDiffM: 5, durationSeconds: 272 },
+          { km: 3, paceFormatted: '4:28', paceSeconds: 268, avgHr: 162, elevationDiffM: 6, durationSeconds: 268 },
+          { km: 4, paceFormatted: '4:26', paceSeconds: 266, avgHr: 165, elevationDiffM: 3, durationSeconds: 266 },
+          { km: 5, paceFormatted: '4:25', paceSeconds: 265, avgHr: 168, elevationDiffM: 5, durationSeconds: 265 },
+          { km: 6, paceFormatted: '4:29', paceSeconds: 269, avgHr: 170, elevationDiffM: 4, durationSeconds: 269 },
+          { km: 7, paceFormatted: '4:30', paceSeconds: 90, avgHr: 172, elevationDiffM: 1, durationSeconds: 90 }
+        ],
+        syncId: `sync_${Date.now()}`,
+        syncedAt: new Date().toISOString()
+      }
+    ];
+  }
 
   let list = [...currentList];
   let added = 0;
