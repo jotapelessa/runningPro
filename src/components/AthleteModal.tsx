@@ -74,6 +74,12 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
   const [maxHR, setMaxHR] = useState<number>(runnerState.macHR || runnerState.maxHr || 188);
   const [restHR, setRestHR] = useState<number>(runnerState.restHR || runnerState.restingHr || 58);
 
+  // Intervals.icu Integration
+  const [intervalsAthleteId, setIntervalsAthleteId] = useState<string>(runnerState.intervalsAthleteId || '');
+  const [intervalsApiKey, setIntervalsApiKey] = useState<string>(runnerState.intervalsApiKey || '');
+  const [isTestingIntervals, setIsTestingIntervals] = useState<boolean>(false);
+  const [intervalsTestResult, setIntervalsTestResult] = useState<'success' | 'error' | null>(null);
+
   // Multi-File Upload State (.GPX, .TCX, .FIT simultaneously)
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState<boolean>(false);
@@ -96,6 +102,22 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
     setMaxHR(calculatedMax);
     if (!restHR || restHR < 35 || restHR > 100) {
       setRestHR(activityProfile === 'sedentary' ? 74 : 58);
+    }
+  };
+
+  const handleTestIntervals = async () => {
+    if (!intervalsApiKey) return;
+    setIsTestingIntervals(true);
+    setIntervalsTestResult(null);
+    try {
+      const { fetchIntervalsProfile } = await import('../lib/intervalsIcu');
+      await fetchIntervalsProfile(intervalsAthleteId, intervalsApiKey);
+      setIntervalsTestResult('success');
+    } catch (err) {
+      console.error(err);
+      setIntervalsTestResult('error');
+    } finally {
+      setIsTestingIntervals(false);
     }
   };
 
@@ -301,6 +323,8 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
       currentVo2max: effectiveVdot,
       isCalibrated: true,
       calibrationSource: formatCountStr,
+      intervalsAthleteId,
+      intervalsApiKey,
     };
 
     if (multiSummary) {
@@ -895,6 +919,62 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
               )}
             </div>
           )}
+
+          {/* Section 6: Integração Intervals.icu */}
+          <div className="space-y-3">
+            <h4 className="text-xs font-bold text-[#FF4E00] uppercase tracking-wider flex items-center gap-1.5 font-heading">
+              <UploadCloud className="w-3.5 h-3.5" />
+              Integração Intervals.icu (Opcional)
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-[11px] font-semibold text-slate-300 block mb-1">Athlete ID (Opcional)</label>
+                <input
+                  type="text"
+                  value={intervalsAthleteId}
+                  onChange={(e) => setIntervalsAthleteId(e.target.value)}
+                  className="w-full bg-[#121214] border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none"
+                  placeholder="Ex: i12345 (Deixe em branco se usar a chave da conta principal)"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-slate-300 block mb-1">API Key</label>
+                <input
+                  type="password"
+                  value={intervalsApiKey}
+                  onChange={(e) => setIntervalsApiKey(e.target.value)}
+                  className="w-full bg-[#121214] border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none"
+                  placeholder="Cole sua API Key do Intervals.icu aqui"
+                />
+              </div>
+              <div className="sm:col-span-2 flex items-center justify-between">
+                <span className="text-[10px] text-slate-400">
+                  Ao preencher a chave, você poderá sincronizar seus treinos do Zepp/Strava e calendário de planilhas.
+                </span>
+                <button
+                  type="button"
+                  onClick={handleTestIntervals}
+                  disabled={isTestingIntervals || !intervalsApiKey}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+                    !intervalsApiKey ? 'bg-white/5 text-slate-500 cursor-not-allowed' :
+                    intervalsTestResult === 'success' ? 'bg-emerald-900/50 text-emerald-400 border border-emerald-500/30' :
+                    intervalsTestResult === 'error' ? 'bg-rose-900/50 text-rose-400 border border-rose-500/30' :
+                    'bg-[#FF4E00]/20 text-[#FF4E00] hover:bg-[#FF4E00]/30'
+                  }`}
+                >
+                  {isTestingIntervals ? (
+                    <span className="animate-pulse">Testando...</span>
+                  ) : intervalsTestResult === 'success' ? (
+                    <><CheckCircle2 className="w-3.5 h-3.5" /> Conectado</>
+                  ) : intervalsTestResult === 'error' ? (
+                    <><AlertTriangle className="w-3.5 h-3.5" /> Falhou</>
+                  ) : (
+                    'Testar Conexão'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
 
           {/* Section 5: Metas e Observações Clínicas */}
           <div className="space-y-3">

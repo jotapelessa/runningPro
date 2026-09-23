@@ -124,6 +124,83 @@ export const ActivitiesTab: React.FC<ActivitiesTabProps> = ({
     }
   };
 
+  // Trigger Intervals.icu Sync
+  const handleSyncIntervals = async () => {
+    if (!runnerState.intervalsApiKey) {
+      setSyncFeedback({
+        message: 'Por favor, configure sua API Key do Intervals.icu no painel do Atleta primeiro.',
+        type: 'info'
+      });
+      setTimeout(() => setSyncFeedback(null), 5000);
+      return;
+    }
+
+    setIsSyncing(true);
+    setSyncFeedback(null);
+
+    try {
+      const { fetchIntervalsActivities, mapIntervalsToUserActivity } = await import('../lib/intervalsIcu');
+      
+      // Buscar os últimos 30 dias por padrão
+      const now = new Date();
+      const newest = now.toISOString();
+      const oldestDate = new Date();
+      oldestDate.setDate(now.getDate() - 30);
+      const oldest = oldestDate.toISOString();
+
+      const intervalsActivities = await fetchIntervalsActivities(
+        runnerState.intervalsAthleteId || '', 
+        runnerState.intervalsApiKey, 
+        oldest, 
+        newest
+      );
+
+      let addedCount = 0;
+      let mergedCount = 0;
+      let currentList = [...activities];
+
+      for (const act of intervalsActivities) {
+        const mapped = mapIntervalsToUserActivity(act);
+        const res = deduplicateOrMergeActivity(currentList, mapped);
+        if (res.wasMerged) {
+          mergedCount++;
+        } else if (res.wasAdded) {
+          addedCount++;
+        }
+        currentList = res.updatedList;
+      }
+
+      onUpdateActivities(currentList);
+
+      if (addedCount > 0 || mergedCount > 0) {
+        setSyncFeedback({
+          message: `Sincronização concluída: ${addedCount} nova(s) atividade(s) do Intervals.icu e ${mergedCount} mesclada(s).`,
+          type: 'success'
+        });
+        confetti({
+          particleCount: 35,
+          spread: 50,
+          origin: { y: 0.6 }
+        });
+      } else {
+        setSyncFeedback({
+          message: 'Tudo atualizado! Nenhuma nova atividade pendente no Intervals.icu.',
+          type: 'info'
+        });
+      }
+
+    } catch (err: any) {
+      console.error('Error syncing Intervals.icu:', err);
+      setSyncFeedback({
+        message: err.message || 'Erro ao sincronizar com Intervals.icu.',
+        type: 'info' // Using info style for error to match existing toast styles
+      });
+    } finally {
+      setIsSyncing(false);
+      setTimeout(() => setSyncFeedback(null), 5000);
+    }
+  };
+
   // Save manual activity
   const handleSaveManualActivity = (newAct: UserActivity) => {
     const res = deduplicateOrMergeActivity(activities, newAct);
@@ -328,7 +405,20 @@ export const ActivitiesTab: React.FC<ActivitiesTabProps> = ({
             }`}
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-            <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar Google APIs'}</span>
+            <span>Google Fit</span>
+          </button>
+          
+          <button
+            onClick={handleSyncIntervals}
+            disabled={isSyncing}
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold font-mono-data uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
+              isSyncing
+                ? 'bg-white/10 text-slate-400 cursor-not-allowed'
+                : 'bg-[#FF4E00] hover:bg-[#E03E00] text-white shadow-md shadow-[#FF4E00]/25'
+            }`}
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>Intervals.icu</span>
           </button>
         </div>
       </div>
@@ -539,6 +629,13 @@ export const ActivitiesTab: React.FC<ActivitiesTabProps> = ({
             >
               <RefreshCw className="w-3.5 h-3.5" />
               <span>Sincronizar Google Fit</span>
+            </button>
+            <button
+              onClick={handleSyncIntervals}
+              className="px-4 py-2 rounded-xl bg-[#FF4E00] hover:bg-[#E03E00] text-white font-bold text-xs font-mono-data uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Intervals.icu</span>
             </button>
           </div>
         </div>

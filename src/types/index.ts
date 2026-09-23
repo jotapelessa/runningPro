@@ -190,6 +190,10 @@ export interface RunnerState {
   // Dias da semana preferidos para treino (0=Segunda, 1=Terça, 2=Quarta, 3=Quinta, 4=Sexta, 5=Sábado, 6=Domingo ou 0=Dom etc)
   // Usamos convenção 0=Segunda, 1=Terça, 2=Quarta, 3=Quinta, 4=Sexta, 5=Sábado, 6=Domingo
   preferredDaysOfWeek?: number[];
+  
+  // Integração Intervals.icu
+  intervalsAthleteId?: string;
+  intervalsApiKey?: string;
 }
 
 

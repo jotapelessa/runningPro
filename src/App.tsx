@@ -104,30 +104,33 @@ export default function App() {
     setRunnerState(prev => {
       const next = { ...prev, ...updatedFields };
       saveRunnerState(next);
-
-      // If key training parameters changed, adapt 8-week plan
-      if (
-        updatedFields.currentVdot !== undefined || 
-        updatedFields.trainingDays !== undefined || 
-        updatedFields.targetRaceDistance !== undefined ||
-        updatedFields.name !== undefined
-      ) {
-        const validGoal = (['5k', '10k', '21k', '42k', 'base'].includes(next.targetRaceDistance as any)
-          ? next.targetRaceDistance
-          : '10k') as '5k' | '10k' | '21k' | '42k' | 'base';
-
-        const updatedPlan = generateEightWeekPlan(
-          next.name || 'Corredor PaceLab',
-          next.currentVdot && next.currentVdot > 0 ? next.currentVdot : 40.0,
-          validGoal,
-          (next.trainingDays && next.trainingDays >= 3 && next.trainingDays <= 6 ? next.trainingDays : 4) as 3 | 4 | 5 | 6
-        );
-        setPlan(updatedPlan);
-        saveTrainingPlan(updatedPlan);
-      }
-
       return next;
     });
+
+    // We use the updated fields merged with current state (which we can approximate since it's synchronous logic)
+    // Actually, to be safe from stale closures, we can just queue the plan update based on the latest state
+    // but the easiest is to compute next here.
+    const nextState = { ...runnerState, ...updatedFields };
+
+    if (
+      updatedFields.currentVdot !== undefined || 
+      updatedFields.trainingDays !== undefined || 
+      updatedFields.targetRaceDistance !== undefined ||
+      updatedFields.name !== undefined
+    ) {
+      const validGoal = (['5k', '10k', '21k', '42k', 'base'].includes(nextState.targetRaceDistance as any)
+        ? nextState.targetRaceDistance
+        : '10k') as '5k' | '10k' | '21k' | '42k' | 'base';
+
+      const updatedPlan = generateEightWeekPlan(
+        nextState.name || 'Corredor PaceLab',
+        nextState.currentVdot && nextState.currentVdot > 0 ? nextState.currentVdot : 40.0,
+        validGoal,
+        (nextState.trainingDays && nextState.trainingDays >= 3 && nextState.trainingDays <= 6 ? nextState.trainingDays : 4) as 3 | 4 | 5 | 6
+      );
+      setPlan(updatedPlan);
+      saveTrainingPlan(updatedPlan);
+    }
   };
 
   const handleAddTestRecord = (newTest: TestRecord) => {
