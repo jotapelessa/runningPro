@@ -187,6 +187,9 @@ export interface RunnerState {
   activityProfile?: 'sedentary' | 'beginner' | 'intermediate' | 'advanced';
   vdotReadiness?: VdotReadiness;
   activePlanType?: 'run_walk_transition' | 'vdot_standard';
+  // Dias da semana preferidos para treino (0=Segunda, 1=Terça, 2=Quarta, 3=Quinta, 4=Sexta, 5=Sábado, 6=Domingo ou 0=Dom etc)
+  // Usamos convenção 0=Segunda, 1=Terça, 2=Quarta, 3=Quinta, 4=Sexta, 5=Sábado, 6=Domingo
+  preferredDaysOfWeek?: number[];
 }
 
 
@@ -277,6 +280,18 @@ export interface DailyWorkout {
   completedPace?: string;
   completedHr?: number;
   rpe?: number;
+  uploadedFile?: {
+    fileName: string;
+    distanceKm: number;
+    durationFormatted: string;
+    paceFormatted: string;
+    avgHr?: number;
+    maxHr?: number;
+    avgCadence?: number;
+    vdot?: number;
+    elevationGainMeters?: number;
+    source?: string;
+  };
 }
 
 export interface TrainingWeek {

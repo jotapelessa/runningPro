@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   Calendar as CalendarIcon, 
   ChevronLeft, 
@@ -10,24 +10,36 @@ import {
   Flame, 
   HeartHandshake, 
   Clock, 
-  Sparkles,
-  Info,
-  CalendarCheck
+  Sparkles, 
+  Info, 
+  CalendarCheck,
+  Watch,
+  UploadCloud,
+  Check,
+  Activity
 } from 'lucide-react';
-import { CalendarSessionEvent, RunnerState } from '../types';
+import confetti from 'canvas-confetti';
+import { CalendarSessionEvent, RunnerState, ParsedWorkout } from '../types';
 import { RUN_WALK_SCHEDULE } from '../lib/runWalkEngine';
+import { parseUniversalWorkoutFile } from '../lib/workoutParser';
 
 interface AdaptationCalendarProps {
   runnerState: RunnerState;
   onStartLiveSession: (weekNum: number) => void;
   onUpdateRunnerState?: (fields: Partial<RunnerState>) => void;
+  onUploadWorkout?: (workout: ParsedWorkout) => void;
 }
 
 export const AdaptationCalendar: React.FC<AdaptationCalendarProps> = ({
   runnerState,
   onStartLiveSession,
-  onUpdateRunnerState
+  onUpdateRunnerState,
+  onUploadWorkout
 }) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadFeedback, setUploadFeedback] = useState<string | null>(null);
+
   // Current calendar view date state
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [viewMode, setViewMode] = useState<'month' | 'week'>('month');
@@ -77,13 +89,69 @@ export const AdaptationCalendar: React.FC<AdaptationCalendarProps> = ({
     setCurrentDate(new Date(year, month + 1, 1));
   };
 
-  // Helper to determine session type for any date:
-  // Terça(2), Quinta(4), Sábado(6) = Treino de Caminha-Corre
-  // Segunda, Quarta, Sexta, Domingo = Regeneração & Fortalecimento de Tendões
+  // Dias ativos configuráveis pelo atleta (dom=0, seg=1, ter=2, qua=3, qui=4, sex=5, sab=6)
+  // Padrão do usuário: Segunda(1), Quarta(3), Sexta(5) OU o que vier em runnerState.preferredDaysOfWeek
+  const activeDaysOfWeek: number[] = runnerState.preferredDaysOfWeek && runnerState.preferredDaysOfWeek.length > 0
+    ? runnerState.preferredDaysOfWeek.map(d => (d + 1) % 7) // converte de convenção Seg=0 para Date.getDay() (Dom=0, Seg=1...)
+    : [1, 3, 5]; // Default: Segunda(1), Quarta(3), Sexta(5)
+
+  const handleTogglePreferredDay = (jsDayOfWeek: number) => {
+    // jsDayOfWeek: 0=Dom, 1=Seg, 2=Ter, 3=Qua, 4=Qui, 5=Sex, 6=Sáb
+    let nextJsDays: number[];
+    if (activeDaysOfWeek.includes(jsDayOfWeek)) {
+      if (activeDaysOfWeek.length <= 1) return; // Mínimo 1 dia
+      nextJsDays = activeDaysOfWeek.filter(d => d !== jsDayOfWeek);
+    } else {
+      nextJsDays = [...activeDaysOfWeek, jsDayOfWeek].sort();
+    }
+    // Converte de volta para 0=Seg, 1=Ter, 2=Qua, 3=Qui, 4=Sex, 5=Sáb, 6=Dom
+    const appDays = nextJsDays.map(d => (d === 0 ? 6 : d - 1));
+    if (onUpdateRunnerState) {
+      onUpdateRunnerState({
+        preferredDaysOfWeek: appDays,
+        trainingDays: appDays.length
+      });
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    setUploadFeedback(null);
+    try {
+      const parsed = await parseUniversalWorkoutFile(file);
+      // Auto-mark date of workout as completed
+      const activityDateStr = parsed.date ? parsed.date.split('T')[0] : selectedDateStr;
+      handleToggleDateComplete(activityDateStr);
+
+      if (onUploadWorkout) {
+        onUploadWorkout(parsed);
+      }
+
+      confetti({
+        particleCount: 50,
+        spread: 60,
+        origin: { y: 0.6 }
+      });
+
+      setUploadFeedback(`✅ Arquivo "${file.name}" importado com sucesso! Distância: ${parsed.distanceKm} km • Duração: ${parsed.durationFormatted} • Pace: ${parsed.paceFormatted}/km`);
+    } catch (err: any) {
+      setUploadFeedback(`❌ Erro ao ler arquivo do smartwatch: ${err.message || err}`);
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  // Helper to determine session type for any date based on activeDaysOfWeek
   const getSessionForDate = (dStr: string) => {
     const d = new Date(dStr + 'T12:00:00');
-    const dayOfWeek = d.getDay(); // 0 is Dom, 2 is Ter, 4 is Qui, 6 is Sab
-    const isWorkoutDay = [2, 4, 6].includes(dayOfWeek);
+    const dayOfWeek = d.getDay(); // 0 is Dom, 1 is Seg, 3 is Qua, 5 is Sex
+    const isWorkoutDay = activeDaysOfWeek.includes(dayOfWeek);
 
     // Week schedule mapping
     const weekNum = Math.min(4, Math.max(1, Math.ceil(d.getDate() / 7)));
@@ -105,8 +173,8 @@ export const AdaptationCalendar: React.FC<AdaptationCalendarProps> = ({
         weekNum,
         title: dayOfWeek === 0 ? 'Descanso Pleno de Cartilagens' : 'Recuperação & Mobilidade de Fáscias',
         duration: '15 min livre',
-        badge: 'Descanso Ativo',
-        focus: 'Alongamento suave de gastrocnêmios e soleares, hidratação e repouso ativo para adaptação tendínea.',
+        badge: 'Proteção Articular',
+        focus: 'Alongamento suave de panturrilhas, hidratação e repouso ativo para remodelagem óssea e tendínea.',
         cues: null
       };
     }
@@ -154,6 +222,48 @@ export const AdaptationCalendar: React.FC<AdaptationCalendarProps> = ({
           >
             <ChevronRight className="w-5 h-5" />
           </button>
+        </div>
+      </div>
+
+      {/* Interactive Preferred Days of Week Selector */}
+      <div className="p-4 rounded-xl bg-[#0B0F0D] border border-emerald-500/25 flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="space-y-0.5">
+          <span className="text-xs font-bold text-emerald-300 font-heading flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5" />
+            Configurar Seus Dias de Treino da Semana:
+          </span>
+          <p className="text-[11px] text-slate-400">
+            Clique para marcar os dias em que você treina (ex: <strong>Segunda, Quarta e Sexta</strong>). Os demais dias serão protegidos para descanso articular.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {[
+            { jsDay: 1, label: 'Seg' },
+            { jsDay: 2, label: 'Ter' },
+            { jsDay: 3, label: 'Qua' },
+            { jsDay: 4, label: 'Qui' },
+            { jsDay: 5, label: 'Sex' },
+            { jsDay: 6, label: 'Sáb' },
+            { jsDay: 0, label: 'Dom' },
+          ].map(({ jsDay, label }) => {
+            const isSelected = activeDaysOfWeek.includes(jsDay);
+            return (
+              <button
+                key={jsDay}
+                type="button"
+                onClick={() => handleTogglePreferredDay(jsDay)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold font-mono-data transition-all cursor-pointer ${
+                  isSelected
+                    ? 'bg-emerald-500 text-black shadow-md shadow-emerald-500/30 ring-2 ring-emerald-400/50'
+                    : 'bg-white/5 text-slate-400 hover:text-white hover:bg-white/10'
+                }`}
+                title={`Alternar ${label} como dia de treino`}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -257,7 +367,25 @@ export const AdaptationCalendar: React.FC<AdaptationCalendarProps> = ({
           )}
         </div>
 
-        <div className="flex items-center gap-3 w-full md:w-auto flex-shrink-0">
+        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto flex-shrink-0">
+          {/* Smartwatch direct upload */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".gpx,.tcx,.fit"
+            className="hidden"
+            onChange={handleFileUpload}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading}
+            className="flex-1 md:flex-initial px-4 py-2.5 rounded-xl border border-white/10 bg-[#16161a] hover:bg-[#1f1f24] text-slate-200 hover:text-white text-xs font-bold font-mono-data transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
+            title="Importar treino do Amazfit T-Rex, Garmin, Strava ou Polar (.gpx, .tcx, .fit)"
+          >
+            <Watch className="w-4 h-4 text-emerald-400" />
+            <span>{isUploading ? 'Processando...' : 'Subir Treino Amazfit (.GPX/.FIT)'}</span>
+          </button>
+
           <button
             onClick={() => handleToggleDateComplete(selectedDateStr)}
             className={`flex-1 md:flex-initial px-4 py-2.5 rounded-xl border text-xs font-bold font-mono-data transition-all flex items-center justify-center gap-2 cursor-pointer ${
@@ -281,6 +409,17 @@ export const AdaptationCalendar: React.FC<AdaptationCalendarProps> = ({
           )}
         </div>
       </div>
+
+      {/* Upload Feedback Toast / Card */}
+      {uploadFeedback && (
+        <div className={`p-3.5 rounded-xl text-xs font-mono-data border animate-fadeIn ${
+          uploadFeedback.startsWith('✅') 
+            ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300' 
+            : 'bg-rose-950/40 border-rose-500/40 text-rose-300'
+        }`}>
+          {uploadFeedback}
+        </div>
+      )}
 
     </div>
   );

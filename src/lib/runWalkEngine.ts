@@ -114,23 +114,23 @@ const DAY_NAMES = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feir
 
 /**
  * Gera a planilha de treinamento focada no método Caminha-Corre
+ * @param athleteName Nome do atleta
+ * @param trainingDaysPerWeek Número de dias semanais (ex: 3)
+ * @param customActiveDays Dias específicos escolhidos pelo atleta (0=Seg, 1=Ter, 2=Qua, 3=Qui, 4=Sex, 5=Sáb, 6=Dom). Padrão [0, 2, 4] para Seg/Qua/Sex ou [1, 3, 5] para Ter/Qui/Sáb.
  */
 export function generateRunWalkPlan(
   athleteName: string = 'Atleta em Transição',
-  trainingDaysPerWeek: number = 3
+  trainingDaysPerWeek: number = 3,
+  customActiveDays?: number[]
 ): TrainingPlan {
+  const defaultDays = trainingDaysPerWeek <= 3 ? [0, 2, 4] : [0, 1, 3, 4]; // Seg/Qua/Sex padrão inicial se não especificado
+  const targetActiveDays = (customActiveDays && customActiveDays.length > 0) ? customActiveDays : defaultDays;
+
   const weeks: TrainingWeek[] = RUN_WALK_SCHEDULE.map((cfg) => {
     const days: DailyWorkout[] = [];
 
-    // Dias ativos recomendados para 3x na semana: Terça(1), Quinta(3), Sábado(5)
-    // Se for 4x: Terça(1), Quarta(2), Quinta(3), Sábado(5)
     for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
-      let isActive = false;
-      if (trainingDaysPerWeek <= 3) {
-        isActive = [1, 3, 5].includes(dayIdx);
-      } else {
-        isActive = [1, 2, 4, 5].includes(dayIdx);
-      }
+      const isActive = targetActiveDays.includes(dayIdx);
 
       const workoutId = `rw-w${cfg.weekNumber}-d${dayIdx}`;
       if (isActive) {

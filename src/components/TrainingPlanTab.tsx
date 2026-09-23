@@ -13,12 +13,15 @@ import {
   Clock,
   ArrowRight,
   Play,
-  HeartHandshake
+  HeartHandshake,
+  Watch,
+  UploadCloud
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { DailyWorkout, TrainingPlan, TrainingWeek, RunnerState } from '../types';
+import { DailyWorkout, TrainingPlan, TrainingWeek, RunnerState, ParsedWorkout } from '../types';
 import { generateEightWeekPlan } from '../lib/planGenerator';
 import { generateRunWalkPlan, RUN_WALK_SCHEDULE } from '../lib/runWalkEngine';
+import { parseUniversalWorkoutFile } from '../lib/workoutParser';
 import { LiveRunWalkModal } from './LiveRunWalkModal';
 import { AdaptationCalendar } from './AdaptationCalendar';
 
@@ -28,6 +31,7 @@ interface TrainingPlanTabProps {
   onUpdatePlan: (newPlan: TrainingPlan) => void;
   onOpenAthleteModal: () => void;
   onUpdateRunnerState?: (updatedFields: Partial<RunnerState>) => void;
+  onApplyWorkout?: (workout: ParsedWorkout) => void;
 }
 
 
@@ -36,10 +40,15 @@ export const TrainingPlanTab: React.FC<TrainingPlanTabProps> = ({
   currentPlan,
   onUpdatePlan,
   onOpenAthleteModal,
-  onUpdateRunnerState
+  onUpdateRunnerState,
+  onApplyWorkout
 }) => {
   const isTransitionUser = runnerState.level === 'sedentary_transition' || runnerState.activityProfile === 'sedentary';
   const isUncalibrated = !isTransitionUser && (runnerState.isCalibrated === false || (runnerState.currentVdot || 0) <= 0);
+
+  // File upload state for direct workout upload (Amazfit, GPX, etc)
+  const [uploadingWorkoutId, setUploadingWorkoutId] = useState<string | null>(null);
+  const cardFileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Sub-view mode: 'calendar' (focused for run-walk adaptation) or 'spreadsheet' (8-week matrix)
   const [subView, setSubView] = useState<'calendar' | 'spreadsheet'>(isTransitionUser ? 'calendar' : 'spreadsheet');
@@ -97,7 +106,11 @@ export const TrainingPlanTab: React.FC<TrainingPlanTabProps> = ({
   // Generate a fresh plan
   const handleRegeneratePlan = () => {
     if (isTransitionUser) {
-      const rwPlan = generateRunWalkPlan(runnerState.name || 'Atleta em Transição', selectedFreq);
+      const rwPlan = generateRunWalkPlan(
+        runnerState.name || 'Atleta em Transição', 
+        selectedFreq,
+        runnerState.preferredDaysOfWeek
+      );
       onUpdatePlan(rwPlan);
     } else {
       const vdotToUse = runnerState.currentVdot > 0 ? runnerState.currentVdot : 38.0;
@@ -208,6 +221,67 @@ export const TrainingPlanTab: React.FC<TrainingPlanTabProps> = ({
     setLoggingWorkoutId(null);
     setFeedbackPace('');
     setFeedbackHr('');
+  };
+
+  // Upload workout file directly to a day's card
+  const handleCardUploadWorkout = async (e: React.ChangeEvent<HTMLInputElement>, workoutId: string) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const parsed = await parseUniversalWorkoutFile(file);
+      if (!currentPlan?.weeks) return;
+
+      const updatedWeeks = currentPlan.weeks.map(week => ({
+        ...week,
+        days: week.days.map(day => {
+          if (day.id === workoutId) {
+            return {
+              ...day,
+              completed: true,
+              completedPace: parsed.paceFormatted ? `${parsed.paceFormatted}/km` : undefined,
+              completedHr: parsed.avgHR || undefined,
+              rpe: 6,
+              uploadedFile: {
+                fileName: file.name,
+                distanceKm: parsed.distanceKm,
+                durationFormatted: parsed.durationFormatted,
+                paceFormatted: parsed.paceFormatted,
+                avgHr: parsed.avgHR ?? undefined,
+                maxHr: parsed.maxHR ?? undefined,
+                avgCadence: parsed.avgCadence ?? undefined,
+                vdot: parsed.vdot ?? undefined,
+                elevationGainMeters: parsed.elevationGainMeters ?? undefined,
+                source: 'smartwatch_upload'
+              }
+            };
+          }
+          return day;
+        })
+      }));
+
+      onUpdatePlan({
+        ...currentPlan,
+        weeks: updatedWeeks
+      });
+
+      if (onApplyWorkout) {
+        onApplyWorkout(parsed);
+      }
+
+      confetti({
+        particleCount: 40,
+        spread: 50,
+        origin: { y: 0.7 }
+      });
+    } catch (err: any) {
+      alert(`Erro ao ler arquivo do relógio: ${err.message || err}`);
+    } finally {
+      setUploadingWorkoutId(null);
+      if (cardFileInputRef.current) {
+        cardFileInputRef.current.value = '';
+      }
+    }
   };
 
   // Export Plan to CSV
@@ -345,6 +419,7 @@ export const TrainingPlanTab: React.FC<TrainingPlanTabProps> = ({
             setIsLiveModalOpen(true);
           }}
           onUpdateRunnerState={onUpdateRunnerState}
+          onUploadWorkout={onApplyWorkout}
         />
       ) : (
         <>
@@ -411,6 +486,68 @@ export const TrainingPlanTab: React.FC<TrainingPlanTabProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Custom Days of Week Selector Bar inside Spreadsheet View */}
+        {isTransitionUser && (
+          <div className="pt-2 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <span className="text-slate-300 font-semibold flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+              Dias de Treino Ativos:
+            </span>
+            <div className="flex items-center gap-1 flex-wrap">
+              {[
+                { dayIdx: 0, label: 'Seg' },
+                { dayIdx: 1, label: 'Ter' },
+                { dayIdx: 2, label: 'Qua' },
+                { dayIdx: 3, label: 'Qui' },
+                { dayIdx: 4, label: 'Sex' },
+                { dayIdx: 5, label: 'Sáb' },
+                { dayIdx: 6, label: 'Dom' },
+              ].map(({ dayIdx, label }) => {
+                const currentPref = runnerState.preferredDaysOfWeek && runnerState.preferredDaysOfWeek.length > 0
+                  ? runnerState.preferredDaysOfWeek
+                  : [0, 2, 4]; // Seg, Qua, Sex
+                const isSelected = currentPref.includes(dayIdx);
+
+                return (
+                  <button
+                    key={dayIdx}
+                    type="button"
+                    onClick={() => {
+                      let nextPref: number[];
+                      if (isSelected) {
+                        if (currentPref.length <= 1) return;
+                        nextPref = currentPref.filter(d => d !== dayIdx);
+                      } else {
+                        nextPref = [...currentPref, dayIdx].sort();
+                      }
+                      if (onUpdateRunnerState) {
+                        onUpdateRunnerState({
+                          preferredDaysOfWeek: nextPref,
+                          trainingDays: nextPref.length
+                        });
+                      }
+                      // Auto-regenerate plan with new preferred days
+                      const updatedRwPlan = generateRunWalkPlan(
+                        runnerState.name || 'Atleta em Transição',
+                        nextPref.length,
+                        nextPref
+                      );
+                      onUpdatePlan(updatedRwPlan);
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold font-mono-data transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-emerald-500 text-black shadow-sm font-black'
+                        : 'bg-white/5 text-slate-400 hover:text-white hover:bg-white/10'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Global Progress Strip */}
         <div className="pt-3 border-t border-white/10 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
@@ -603,10 +740,17 @@ export const TrainingPlanTab: React.FC<TrainingPlanTabProps> = ({
                 </div>
 
                 {/* Completed Details pill if logged */}
-                {workout.completed && (workout.completedPace || workout.rpe) && (
+                {workout.completed && (workout.completedPace || workout.rpe || workout.uploadedFile) && (
                   <div className="bg-emerald-950/50 border border-emerald-500/30 p-2 rounded-lg text-[10px] font-mono-data text-emerald-300 mb-2 space-y-0.5">
+                    {workout.uploadedFile && (
+                      <div className="text-white font-bold flex items-center gap-1 mb-1 pb-1 border-b border-emerald-500/20">
+                        <Watch className="w-3 h-3 text-emerald-400" />
+                        <span className="truncate">{workout.uploadedFile.fileName}</span>
+                      </div>
+                    )}
                     {workout.completedPace && <div>Pace Real: <strong>{workout.completedPace}</strong></div>}
                     {workout.completedHr && <div>FC Média: <strong>{workout.completedHr} bpm</strong></div>}
+                    {workout.uploadedFile?.distanceKm && <div>Distância GPS: <strong>{workout.uploadedFile.distanceKm} km</strong></div>}
                     {workout.rpe && <div>Percepção (RPE): <strong>{workout.rpe}/10</strong></div>}
                   </div>
                 )}
@@ -686,19 +830,44 @@ export const TrainingPlanTab: React.FC<TrainingPlanTabProps> = ({
                 </button>
 
                 {!isRest && (
-                  <button
-                    onClick={() => setLoggingWorkoutId(isLoggingThis ? null : workout.id)}
-                    className="p-1.5 text-slate-400 hover:text-[#FF4E00] bg-[#121214] hover:bg-white/10 rounded-lg border border-white/10 cursor-pointer"
-                    title="Registrar dados reais de pace e FC"
-                  >
-                    <Activity className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => {
+                        setUploadingWorkoutId(workout.id);
+                        cardFileInputRef.current?.click();
+                      }}
+                      className="p-1.5 text-slate-400 hover:text-emerald-400 bg-[#121214] hover:bg-white/10 rounded-lg border border-white/10 cursor-pointer"
+                      title="Upload arquivo do Amazfit / Smartwatch (.gpx, .tcx, .fit)"
+                    >
+                      <Watch className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setLoggingWorkoutId(isLoggingThis ? null : workout.id)}
+                      className="p-1.5 text-slate-400 hover:text-[#FF4E00] bg-[#121214] hover:bg-white/10 rounded-lg border border-white/10 cursor-pointer"
+                      title="Registrar dados reais de pace e FC manualmente"
+                    >
+                      <Activity className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
           );
         })}
       </div>
+
+      {/* Hidden file input for card-level smartwatch uploads */}
+      <input
+        ref={cardFileInputRef}
+        type="file"
+        accept=".gpx,.tcx,.fit"
+        className="hidden"
+        onChange={(e) => {
+          if (uploadingWorkoutId) {
+            handleCardUploadWorkout(e, uploadingWorkoutId);
+          }
+        }}
+      />
       </>
     )}
 

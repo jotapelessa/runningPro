@@ -308,6 +308,7 @@ export default function App() {
                 onUpdatePlan={handleUpdatePlan}
                 onOpenAthleteModal={() => setIsAthleteModalOpen(true)}
                 onUpdateRunnerState={handleUpdateRunnerState}
+                onApplyWorkout={handleApplyWorkout}
               />
 
             </motion.div>
