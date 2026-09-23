@@ -9,13 +9,22 @@ export const INITIAL_USER_ACTIVITIES: UserActivity[] = [];
 
 /**
  * Loads all user activities from localStorage, or defaults to initial set.
+ * Filters out any legacy Google Fit or Zepp data to ensure full sanitization.
  */
 export function loadUserActivities(): UserActivity[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_ACTIVITIES);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed)) {
+        // Sanitize legacy data
+        const sanitized = parsed.filter(act => 
+          act.source !== 'google_fit' && 
+          act.source !== 'zepp' &&
+          !(act.notes && act.notes.includes('Google Fitness REST API'))
+        );
+        return sanitized;
+      }
     }
   } catch (e) {
     console.error('Failed to load user activities from storage:', e);
