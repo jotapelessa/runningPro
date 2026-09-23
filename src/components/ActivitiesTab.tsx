@@ -27,16 +27,12 @@ import {
   UserCheck
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { UserActivity, ActivityFilter, GoogleSyncState, RunnerState } from '../types';
+import { UserActivity, ActivityFilter, RunnerState } from '../types';
 import { 
-  loadGoogleSyncState, 
-  saveGoogleSyncState, 
-  simulateGoogleFitSync, 
   deduplicateOrMergeActivity 
 } from '../lib/activitiesStorage';
 import { ActivityDetailModal } from './ActivityDetailModal';
 import { ManualActivityModal } from './ManualActivityModal';
-import { GoogleConnectModal } from './GoogleConnectModal';
 import { formatPace, formatTime } from '../lib/vdotCalculator';
 
 interface ActivitiesTabProps {
@@ -53,76 +49,8 @@ export const ActivitiesTab: React.FC<ActivitiesTabProps> = ({
   onOpenAthleteModal
 }) => {
   // Sync State
-  const [syncState, setSyncState] = useState<GoogleSyncState>(() => loadGoogleSyncState());
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
-  const [isGoogleModalOpen, setIsGoogleModalOpen] = useState<boolean>(false);
   const [syncFeedback, setSyncFeedback] = useState<{ message: string; type: 'success' | 'info' } | null>(null);
-
-  // Auto-sync on component mount if backend has active Google session
-  useEffect(() => {
-    let isMounted = true;
-    async function checkAndAutoSync() {
-      try {
-        const res = await fetch('/api/fitness/activities');
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success && Array.isArray(data.sessions) && data.sessions.length > 0 && isMounted) {
-            handleSyncGoogle();
-          }
-        }
-      } catch (e) {
-        // silent check
-      }
-    }
-    checkAndAutoSync();
-    return () => { isMounted = false; };
-  }, []);
-
-  // Filters State
-  const [filters, setFilters] = useState<ActivityFilter>({
-    type: 'all',
-    period: 'all',
-    source: 'all',
-    searchQuery: ''
-  });
-
-  // Modal State
-  const [selectedActivity, setSelectedActivity] = useState<UserActivity | null>(null);
-  const [isManualModalOpen, setIsManualModalOpen] = useState<boolean>(false);
-
-  // Trigger Google Sync with Deduplication
-  const handleSyncGoogle = async () => {
-    setIsSyncing(true);
-    setSyncFeedback(null);
-
-    try {
-      const result = await simulateGoogleFitSync(activities);
-      onUpdateActivities(result.activities);
-      setSyncState(result.syncState);
-
-      if (result.addedCount > 0 || result.mergedCount > 0) {
-        setSyncFeedback({
-          message: `Sincronização concluída: ${result.addedCount} nova(s) atividade(s) importada(s) e ${result.mergedCount} mesclada(s) sem duplicidades.`,
-          type: 'success'
-        });
-        confetti({
-          particleCount: 35,
-          spread: 50,
-          origin: { y: 0.6 }
-        });
-      } else {
-        setSyncFeedback({
-          message: 'Tudo atualizado! Nenhuma nova atividade pendente no Google Fit / Health Connect.',
-          type: 'info'
-        });
-      }
-    } catch (err) {
-      console.error('Error syncing Google APIs:', err);
-    } finally {
-      setIsSyncing(false);
-      setTimeout(() => setSyncFeedback(null), 5000);
-    }
-  };
 
   // Trigger Intervals.icu Sync
   const handleSyncIntervals = async () => {
@@ -232,9 +160,6 @@ export const ActivitiesTab: React.FC<ActivitiesTabProps> = ({
         if (filters.source === 'manual' && item.source !== 'manual') {
           return false;
         }
-        if (filters.source === 'google_api' && item.source !== 'google_fit' && item.source !== 'health_connect') {
-          return false;
-        }
 
         // Period filter
         if (filters.period !== 'all') {
@@ -297,7 +222,7 @@ export const ActivitiesTab: React.FC<ActivitiesTabProps> = ({
             </h2>
           </div>
           <p className="text-xs text-slate-400">
-            Mapeamento de treinos manuais e sincronização com Google Fit, Health Connect e Google Maps
+            Mapeamento de treinos manuais e sincronização com Intervals.icu
           </p>
         </div>
 
@@ -355,70 +280,54 @@ export const ActivitiesTab: React.FC<ActivitiesTabProps> = ({
         </div>
       </div>
 
-      {/* Google Fit / Health Connect Synchronizer Strip */}
+      {/* Intervals.icu Synchronizer Strip */}
       <div className="telemetry-card rounded-2xl p-4 sm:p-5 border border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-start sm:items-center gap-3.5">
-          <div className="p-2.5 rounded-2xl bg-blue-500/10 border border-blue-500/30 text-blue-400 flex-shrink-0">
+          <div className="p-2.5 rounded-2xl bg-[#FF4E00]/10 border border-[#FF4E00]/30 text-[#FF4E00] flex-shrink-0">
             <Globe className="w-5 h-5" />
           </div>
           <div className="space-y-0.5">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-bold text-white font-heading">
-                Google Fit / Google Health Connect API
+                Integração Automática com Intervals.icu
               </span>
               <span className={`text-[10px] font-mono-data px-2 py-0.5 rounded-md font-bold flex items-center gap-1 ${
-                syncState.isConnected
+                runnerState.intervalsApiKey
                   ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-500/30'
-                  : 'bg-blue-950/80 text-blue-300 border border-blue-500/30'
+                  : 'bg-slate-950/80 text-slate-400 border border-slate-700/30'
               }`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${syncState.isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-blue-400'}`} />
-                {syncState.isConnected ? 'CONECTADO & SEGURO' : 'CONEXÃO DISPONÍVEL'}
+                <span className={`w-1.5 h-1.5 rounded-full ${runnerState.intervalsApiKey ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                {runnerState.intervalsApiKey ? 'CONECTADO & SEGURO' : 'AGUARDANDO CONFIGURAÇÃO'}
               </span>
-              {syncState.userEmail && (
-                <span className="text-[11px] font-mono-data bg-white/5 border border-white/10 px-2 py-0.5 rounded-md text-slate-300">
-                  {syncState.userEmail}
-                </span>
-              )}
             </div>
             <p className="text-xs text-slate-400">
-              Última sincronização: {syncState.lastSync ? new Date(syncState.lastSync).toLocaleString('pt-BR') : 'Nunca sincronizado'} • Deduplicação inteligente de treinos ativada
+              Sincroniza Strava, Garmin, Coros, Zepp via Intervals.icu • Deduplicação inteligente de treinos ativada
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto">
-          <button
-            type="button"
-            onClick={() => setIsGoogleModalOpen(true)}
-            className="flex-1 sm:flex-initial px-3.5 py-2 rounded-xl text-xs font-bold font-mono-data border border-white/10 bg-white/5 hover:bg-white/10 text-slate-200 transition-all cursor-pointer whitespace-nowrap"
-          >
-            {syncState.isConnected ? 'Gerenciar Conta' : 'Conectar Conta Google'}
-          </button>
+          {!runnerState.intervalsApiKey && (
+            <button
+              type="button"
+              onClick={onOpenAthleteModal}
+              className="flex-1 sm:flex-initial px-3.5 py-2 rounded-xl text-xs font-bold font-mono-data border border-white/10 bg-white/5 hover:bg-white/10 text-slate-200 transition-all cursor-pointer whitespace-nowrap"
+            >
+              Configurar Intervals.icu
+            </button>
+          )}
 
           <button
-            onClick={handleSyncGoogle}
-            disabled={isSyncing}
-            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold font-mono-data uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
-              isSyncing
-                ? 'bg-white/10 text-slate-400 cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-600/25'
-            }`}
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-            <span>Google Fit</span>
-          </button>
-          
-          <button
             onClick={handleSyncIntervals}
-            disabled={isSyncing}
+            disabled={isSyncing || !runnerState.intervalsApiKey}
             className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold font-mono-data uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
-              isSyncing
+              isSyncing || !runnerState.intervalsApiKey
                 ? 'bg-white/10 text-slate-400 cursor-not-allowed'
                 : 'bg-[#FF4E00] hover:bg-[#E03E00] text-white shadow-md shadow-[#FF4E00]/25'
             }`}
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-            <span>Intervals.icu</span>
+            <span>Sincronizar Intervals</span>
           </button>
         </div>
       </div>
@@ -495,7 +404,7 @@ export const ActivitiesTab: React.FC<ActivitiesTabProps> = ({
             >
               <option value="all">Todas as Origens</option>
               <option value="manual">Apenas Manuais</option>
-              <option value="google_api">Apenas Google APIs</option>
+              <option value="intervals">Apenas Intervals.icu</option>
             </select>
           </div>
         </div>
@@ -536,8 +445,8 @@ export const ActivitiesTab: React.FC<ActivitiesTabProps> = ({
                         {act.title}
                       </h3>
                       <span className={`text-[10px] font-mono-data px-2 py-0.5 rounded-md font-semibold border ${
-                        act.source === 'google_fit' || act.source === 'health_connect'
-                          ? 'bg-blue-950/60 text-blue-400 border-blue-500/30'
+                        act.source === 'intervals' || act.source === 'intervals_icu'
+                          ? 'bg-emerald-950/60 text-emerald-400 border-emerald-500/30'
                           : 'bg-amber-950/60 text-amber-400 border-amber-500/30'
                       }`}>
                         {act.sourceLabel || act.source}
@@ -624,13 +533,6 @@ export const ActivitiesTab: React.FC<ActivitiesTabProps> = ({
               <span>Inserir Atividade Manual</span>
             </button>
             <button
-              onClick={handleSyncGoogle}
-              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs font-mono-data uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Sincronizar Google Fit</span>
-            </button>
-            <button
               onClick={handleSyncIntervals}
               className="px-4 py-2 rounded-xl bg-[#FF4E00] hover:bg-[#E03E00] text-white font-bold text-xs font-mono-data uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5"
             >
@@ -655,15 +557,6 @@ export const ActivitiesTab: React.FC<ActivitiesTabProps> = ({
         onClose={() => setIsManualModalOpen(false)}
         onSaveActivity={handleSaveManualActivity}
         availableShoes={runnerState.shoes || []}
-      />
-
-      {/* Google Connect OAuth Modal */}
-      <GoogleConnectModal
-        isOpen={isGoogleModalOpen}
-        onClose={() => setIsGoogleModalOpen(false)}
-        syncState={syncState}
-        onUpdateSyncState={(newState) => setSyncState(newState)}
-        onSyncActivities={handleSyncGoogle}
       />
     </div>
   );

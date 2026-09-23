@@ -39,7 +39,7 @@ const WEEKDAY_NAMES_PT = [
 ];
 
 /**
- * Analisa as atividades reais do Google Fit / Zepp e calibra os parâmetros fisiológicos do atleta:
+ * Analisa as atividades reais do Intervals.icu e calibra os parâmetros fisiológicos do atleta:
  * - Volume semanal real acumulado (km/semana)
  * - Cadência média observada
  * - VDOT estimado se houver teste ou corrida contínua relevante (> 2km)
@@ -130,11 +130,11 @@ export function calibrateRunnerFromActivities(
     updates.currentVdot = bestVdot;
     updates.currentVo2max = bestVdot;
     updates.isCalibrated = true;
-    updates.calibrationSource = 'Google Fit / Amazfit Zepp (Telemetria Real)';
+    updates.calibrationSource = 'Intervals.icu (Telemetria Real)';
     notes.push(`VDOT calibrado automaticamente para ${bestVdot} a partir de corrida recente.`);
   } else if (!currentState.isCalibrated && recentActivities.length > 0) {
     updates.isCalibrated = true;
-    updates.calibrationSource = 'Google Fit / Amazfit Zepp';
+    updates.calibrationSource = 'Intervals.icu';
   }
 
   return {
@@ -213,7 +213,7 @@ export function reconcilePlanWithActivities(
           avgHr: act.avgHr,
           maxHr: act.maxHr,
           avgCadence: act.cadenceSpm,
-          source: `Google Fit / Zepp: ${act.id}`
+          source: `Intervals.icu: ${act.id}`
         };
 
         // Adaptação fisiológica: verificar sobrecarga
@@ -257,7 +257,7 @@ export function reconcilePlanWithActivities(
             avgHr: act.avgHr,
             maxHr: act.maxHr,
             avgCadence: act.cadenceSpm,
-            source: `Google Fit / Zepp: ${act.id}`
+            source: `Intervals.icu: ${act.id}`
           };
           matchedActivityIds.add(act.id);
           matchedCount++;

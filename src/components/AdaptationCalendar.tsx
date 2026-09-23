@@ -21,11 +21,10 @@ import {
   RefreshCw
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { CalendarSessionEvent, RunnerState, ParsedWorkout, UserActivity, GoogleSyncState } from '../types';
+import { CalendarSessionEvent, RunnerState, ParsedWorkout, UserActivity } from '../types';
 import { RUN_WALK_SCHEDULE } from '../lib/runWalkEngine';
 import { parseUniversalWorkoutFile } from '../lib/workoutParser';
-import { simulateGoogleFitSync, loadGoogleSyncState, saveGoogleSyncState, loadUserActivities } from '../lib/activitiesStorage';
-import { GoogleConnectModal } from './GoogleConnectModal';
+import { loadUserActivities } from '../lib/activitiesStorage';
 
 interface AdaptationCalendarProps {
   runnerState: RunnerState;
@@ -47,11 +46,6 @@ export const AdaptationCalendar: React.FC<AdaptationCalendarProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadFeedback, setUploadFeedback] = useState<string | null>(null);
-
-  // Google Fit Sync State & Modal
-  const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false);
-  const [isSyncingGoogle, setIsSyncingGoogle] = useState(false);
-  const [googleSyncState, setGoogleSyncState] = useState<GoogleSyncState>(() => loadGoogleSyncState());
 
   // Current calendar view date state
   const [currentDate, setCurrentDate] = useState(() => new Date());
@@ -94,57 +88,7 @@ export const AdaptationCalendar: React.FC<AdaptationCalendarProps> = ({
     }
   };
 
-  // Sincronização direta com Google Fit / Google Health Connect
-  const handleSyncGoogleFit = async () => {
-    setIsSyncingGoogle(true);
-    setUploadFeedback(null);
-    try {
-      const currentList = activities && activities.length > 0 ? activities : loadUserActivities();
-      const result = await simulateGoogleFitSync(currentList);
 
-      // Atualiza lista de atividades no app
-      if (onUpdateActivities) {
-        onUpdateActivities(result.activities);
-      }
-      setGoogleSyncState(result.syncState);
-      saveGoogleSyncState(result.syncState);
-
-      // Marca automaticamente no calendário todas as datas com treinos do Google Fit
-      const updatedDates = { ...completedDates };
-      let newlyMarkedDays = 0;
-      result.activities.forEach(act => {
-        if (act.date) {
-          const dStr = act.date.split('T')[0];
-          if (!updatedDates[dStr]) {
-            updatedDates[dStr] = true;
-            newlyMarkedDays++;
-          }
-        }
-      });
-
-      setCompletedDates(updatedDates);
-      try {
-        localStorage.setItem('pacelab_completed_calendar_dates', JSON.stringify(updatedDates));
-      } catch (e) {
-        console.error(e);
-      }
-
-      confetti({
-        particleCount: 45,
-        spread: 60,
-        origin: { y: 0.6 }
-      });
-
-      setUploadFeedback(
-        `✅ Google Fit sincronizado! ${result.addedCount} nova(s) atividade(s) baixada(s), ` +
-        `${result.mergedCount} mesclada(s) e ${newlyMarkedDays} dia(s) marcado(s) no seu calendário de adaptação.`
-      );
-    } catch (err: any) {
-      setUploadFeedback(`❌ Erro ao sincronizar Google Fit: ${err.message || err}`);
-    } finally {
-      setIsSyncingGoogle(false);
-    }
-  };
 
   const handlePrevMonth = () => {
     setCurrentDate(new Date(year, month - 1, 1));
@@ -290,60 +234,7 @@ export const AdaptationCalendar: React.FC<AdaptationCalendarProps> = ({
         </div>
       </div>
 
-      {/* Google Fit / Google Health Connect API Synchronizer Banner */}
-      <div className="telemetry-card rounded-2xl p-4 sm:p-5 border border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-[#0a101d]/60">
-        <div className="flex items-start sm:items-center gap-3.5">
-          <div className="p-2.5 rounded-2xl bg-blue-500/10 border border-blue-500/30 text-blue-400 flex-shrink-0">
-            <Globe className="w-5 h-5" />
-          </div>
-          <div className="space-y-0.5">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-bold text-white font-heading">
-                Google Fit / Google Health Connect API
-              </span>
-              <span className={`text-[10px] font-mono-data px-2 py-0.5 rounded-md font-bold flex items-center gap-1 ${
-                googleSyncState.isConnected
-                  ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-500/30'
-                  : 'bg-blue-950/80 text-blue-300 border border-blue-500/30'
-              }`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${googleSyncState.isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-blue-400'}`} />
-                {googleSyncState.isConnected ? 'CONECTADO & SEGURO' : 'CONEXÃO DISPONÍVEL'}
-              </span>
-              {googleSyncState.userEmail && (
-                <span className="text-[11px] font-mono-data bg-white/5 border border-white/10 px-2 py-0.5 rounded-md text-slate-300">
-                  {googleSyncState.userEmail}
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-slate-400">
-              Última sincronização: {googleSyncState.lastSync ? new Date(googleSyncState.lastSync).toLocaleString('pt-BR') : '18/09/2026, 05:00:15'} • Deduplicação inteligente de treinos ativada
-            </p>
-          </div>
-        </div>
 
-        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto">
-          <button
-            type="button"
-            onClick={() => setIsGoogleModalOpen(true)}
-            className="flex-1 sm:flex-initial px-3.5 py-2 rounded-xl text-xs font-bold font-mono-data border border-white/10 bg-white/5 hover:bg-white/10 text-slate-200 transition-all cursor-pointer whitespace-nowrap"
-          >
-            {googleSyncState.isConnected ? 'Gerenciar Conta' : 'Conectar Conta Google'}
-          </button>
-
-          <button
-            onClick={handleSyncGoogleFit}
-            disabled={isSyncingGoogle}
-            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold font-mono-data uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
-              isSyncingGoogle
-                ? 'bg-white/10 text-slate-400 cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-600/25'
-            }`}
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isSyncingGoogle ? 'animate-spin' : ''}`} />
-            <span>{isSyncingGoogle ? 'Sincronizando...' : 'Sincronizar Google Fit'}</span>
-          </button>
-        </div>
-      </div>
 
       {/* Interactive Preferred Days of Week Selector */}
       <div className="p-4 rounded-xl bg-[#0B0F0D] border border-emerald-500/25 flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -541,14 +432,7 @@ export const AdaptationCalendar: React.FC<AdaptationCalendarProps> = ({
         </div>
       )}
 
-      {/* Google Connect OAuth Modal */}
-      <GoogleConnectModal
-        isOpen={isGoogleModalOpen}
-        onClose={() => setIsGoogleModalOpen(false)}
-        syncState={googleSyncState}
-        onUpdateSyncState={(newState) => setGoogleSyncState(newState)}
-        onSyncActivities={handleSyncGoogleFit}
-      />
+
 
     </div>
   );

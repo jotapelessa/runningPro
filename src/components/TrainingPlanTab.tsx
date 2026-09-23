@@ -136,10 +136,10 @@ export const TrainingPlanTab: React.FC<TrainingPlanTabProps> = ({
 
   const [reconcileNotice, setReconcileNotice] = useState<string | null>(null);
 
-  // Reconcile Plan with Google Fit & Wearable Activities
+  // Reconcile Plan with Activities
   const handleReconcileActivities = () => {
     if (!activities || activities.length === 0) {
-      setReconcileNotice('Nenhuma atividade recente sincronizada do Google Fit ou relógio encontrada.');
+      setReconcileNotice('Nenhuma atividade recente sincronizada do Intervals.icu encontrada.');
       setTimeout(() => setReconcileNotice(null), 4000);
       return;
     }
@@ -150,7 +150,7 @@ export const TrainingPlanTab: React.FC<TrainingPlanTabProps> = ({
     if (result.matchedCount > 0) {
       confetti({ particleCount: 50, spread: 50, origin: { y: 0.6 } });
       setReconcileNotice(
-        `✓ ${result.matchedCount} treino(s) do Google Fit/Relógio sincronizados e confirmados na planilha!` +
+        `✓ ${result.matchedCount} treino(s) do Intervals.icu sincronizados e confirmados na planilha!` +
         (result.overloadDetected ? ` Atenção: ${result.overloadNotes[0]}` : '')
       );
     } else {
@@ -510,13 +510,13 @@ export const TrainingPlanTab: React.FC<TrainingPlanTabProps> = ({
             </div>
 
             <button
-              id="btn-reconcile-google-fit"
+              id="btn-reconcile-intervals"
               onClick={handleReconcileActivities}
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 font-bold text-xs font-mono-data uppercase transition-all shadow-md cursor-pointer"
-              title="Sincronizar e dar baixa automática nos treinos do plano usando atividades do Google Fit ou arquivos importados"
+              title="Sincronizar e dar baixa automática nos treinos do plano usando atividades do Intervals.icu ou arquivos importados"
             >
               <Activity className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Sincronizar Google Fit</span>
+              <span>Sincronizar Intervals.icu</span>
             </button>
 
             <button

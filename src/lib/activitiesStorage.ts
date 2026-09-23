@@ -1,8 +1,7 @@
-import { UserActivity, GoogleSyncState, RoutePoint, ActivitySplit, ActivityType } from '../types';
+import { UserActivity, RoutePoint, ActivitySplit, ActivityType } from '../types';
 import { calculateVDOT, formatPace, formatTime } from './vdotCalculator';
 
 const STORAGE_KEY_ACTIVITIES = 'pacelab_user_activities_v3.5';
-const STORAGE_KEY_SYNC = 'pacelab_google_sync_v3.5';
 
 // Realistic GPS paths for default demo workouts
 const IBIRAPUERA_COORDS: RoutePoint[] = [
@@ -46,8 +45,8 @@ export const INITIAL_USER_ACTIVITIES: UserActivity[] = [
     id: 'act-1',
     title: 'Longão de Domingo na Orla de Copacabana',
     type: 'run',
-    source: 'google_fit',
-    sourceLabel: 'Google Fit API',
+    source: 'intervals',
+    sourceLabel: 'Intervals.icu',
     date: '2026-09-18T06:45:00',
     distanceKm: 14.0,
     distanceMeters: 14000,
@@ -90,8 +89,8 @@ export const INITIAL_USER_ACTIVITIES: UserActivity[] = [
     id: 'act-2',
     title: 'Treino de Limiar (Tempo Run) no Ibirapuera',
     type: 'run',
-    source: 'health_connect',
-    sourceLabel: 'Google Health Connect',
+    source: 'intervals',
+    sourceLabel: 'Intervals.icu',
     date: '2026-09-16T18:30:00',
     distanceKm: 8.0,
     distanceMeters: 8000,
@@ -158,8 +157,8 @@ export const INITIAL_USER_ACTIVITIES: UserActivity[] = [
     id: 'act-4',
     title: 'Rodagem Aeróbica Z2 no Parque Barigui',
     type: 'run',
-    source: 'google_fit',
-    sourceLabel: 'Google Maps / Fit',
+    source: 'intervals',
+    sourceLabel: 'Intervals.icu',
     date: '2026-09-12T07:00:00',
     distanceKm: 10.0,
     distanceMeters: 10000,
@@ -196,12 +195,7 @@ export const INITIAL_USER_ACTIVITIES: UserActivity[] = [
   }
 ];
 
-export const INITIAL_SYNC_STATE: GoogleSyncState = {
-  status: 'idle',
-  lastSync: '2026-09-18T08:00:15Z',
-  serviceName: 'Google Fit / Health Connect API',
-  syncedCount: 3
-};
+
 
 /**
  * Loads all user activities from localStorage, or defaults to initial set.
@@ -227,32 +221,6 @@ export function saveUserActivities(activities: UserActivity[]): void {
     localStorage.setItem(STORAGE_KEY_ACTIVITIES, JSON.stringify(activities));
   } catch (e) {
     console.error('Failed to save user activities to storage:', e);
-  }
-}
-
-/**
- * Loads the current Google API sync state.
- */
-export function loadGoogleSyncState(): GoogleSyncState {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_SYNC);
-    if (raw) {
-      return JSON.parse(raw);
-    }
-  } catch (e) {
-    console.error('Failed to load Google sync state:', e);
-  }
-  return INITIAL_SYNC_STATE;
-}
-
-/**
- * Saves the current Google API sync state.
- */
-export function saveGoogleSyncState(state: GoogleSyncState): void {
-  try {
-    localStorage.setItem(STORAGE_KEY_SYNC, JSON.stringify(state));
-  } catch (e) {
-    console.error('Failed to save Google sync state:', e);
   }
 }
 
@@ -354,7 +322,7 @@ export function deduplicateOrMergeActivity(
       vdot: incoming.vdot || existing.vdot,
       source: existing.source === 'manual' ? incoming.source : existing.source,
       sourceLabel: existing.source === 'manual' 
-        ? `Manual (Sincronizado c/ ${incoming.sourceLabel || 'Google Fit'})`
+        ? `Manual (Sincronizado c/ ${incoming.sourceLabel || 'Intervals.icu'})`
         : existing.sourceLabel,
       syncedAt: new Date().toISOString()
     };
@@ -369,124 +337,7 @@ export function deduplicateOrMergeActivity(
   return { updatedList: nextList, action: 'inserted' };
 }
 
-/**
- * Simulates syncing with Google Fit & Google Health Connect APIs.
- * Fetches latest cloud activities, detects duplicates and merges them cleanly.
- */
-export async function simulateGoogleFitSync(
-  currentList: UserActivity[]
-): Promise<{ 
-  addedCount: number; 
-  mergedCount: number; 
-  activities: UserActivity[]; 
-  syncState: GoogleSyncState 
-}> {
-  // Simulate network delay for real API experience
-  await new Promise(resolve => setTimeout(resolve, 800));
 
-  let incomingFromGoogle: UserActivity[] = [];
-
-  try {
-    const res = await fetch('/api/fitness/activities?t=' + Date.now());
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data.sessions) && data.sessions.length > 0) {
-        incomingFromGoogle = data.sessions.map((sess: any) => {
-          const startMs = parseInt(sess.startTimeMillis, 10) || Date.now();
-          const endMs = parseInt(sess.endTimeMillis, 10) || startMs + 1800000;
-          const durationSeconds = Math.max(30, Math.round((endMs - startMs) / 1000));
-          const isRun = sess.activityType === 8;
-          const isWalk = sess.activityType === 7 || (sess.name && sess.name.toLowerCase().includes('walk'));
-          const isOther = sess.activityType === 108 || (sess.name && sess.name.toLowerCase().includes('outros'));
-          const type: 'run' | 'walk' | 'other' = isRun ? 'run' : isWalk ? 'walk' : isOther ? 'other' : 'run';
-          
-          // Use exact distance if available from Google Fit datasets, otherwise estimate
-          let distanceMeters = sess.exactDistanceMeters || 0;
-          let distanceKm = 0;
-          if (distanceMeters > 50) {
-            distanceKm = Math.round((distanceMeters / 1000) * 100) / 100;
-          } else if (!isOther) {
-            const estSpeedKmh = isRun ? 10.5 : 5.2;
-            distanceKm = Math.round((estSpeedKmh * (durationSeconds / 3600)) * 100) / 100;
-            distanceMeters = Math.round(distanceKm * 1000);
-          }
-
-          const paceSec = distanceKm > 0 ? Math.round(durationSeconds / distanceKm) : 0;
-          const avgHr = sess.avgHeartRate;
-          const calories = sess.exactCalories || (distanceKm > 0 ? Math.round(distanceKm * 65) : Math.round((durationSeconds / 60) * 6));
-          
-          const appName = sess.application?.packageName?.includes('huami') 
-            ? 'Amazfit (Zepp)' 
-            : 'Google Fit';
-
-          const title = sess.name 
-            ? sess.name 
-            : isRun ? 'Corrida • Amazfit' 
-            : isWalk ? 'Caminhada • Amazfit' 
-            : 'Treino Físico • Amazfit';
-
-          const route = Array.isArray(sess.routePoints) && sess.routePoints.length >= 2 
-            ? sess.routePoints 
-            : undefined;
-
-          return {
-            id: `gfit-${sess.id || startMs}`,
-            title,
-            type,
-            source: 'google_fit',
-            sourceLabel: `${appName} • Google Fit API`,
-            date: new Date(startMs).toISOString(),
-            distanceKm,
-            distanceMeters,
-            durationSeconds,
-            durationFormatted: formatTime(durationSeconds),
-            paceSecondsPerKm: paceSec,
-            paceFormatted: paceSec > 0 ? formatPace(paceSec) : '--:--',
-            speedAvgKmh: distanceKm > 0 ? Math.round((distanceKm / (durationSeconds / 3600)) * 10) / 10 : 0,
-            speedMaxKmh: distanceKm > 0 ? Math.round((distanceKm / (durationSeconds / 3600)) * 1.18 * 10) / 10 : 0,
-            avgHr,
-            calories,
-            route,
-            vdot: isRun && distanceMeters >= 1500 ? Math.round(calculateVDOT(distanceMeters, durationSeconds) * 10) / 10 : undefined,
-            notes: `Importado de ${appName} via Google Fitness REST API.` + (route ? ` Rota com ${route.length} coordenadas GPS.` : ''),
-            syncId: sess.id,
-            syncedAt: new Date().toISOString()
-          } as UserActivity;
-        });
-      }
-    }
-  } catch (err) {
-    console.warn('Google Fit sessions fetch failed:', err);
-  }
-
-  let list = [...currentList];
-  let added = 0;
-  let merged = 0;
-
-  for (const incoming of incomingFromGoogle) {
-    const res = deduplicateOrMergeActivity(list, incoming);
-    list = res.updatedList;
-    if (res.action === 'inserted') added++;
-    if (res.action === 'merged') merged++;
-  }
-
-  const syncState: GoogleSyncState = {
-    status: 'success',
-    lastSync: new Date().toISOString(),
-    serviceName: 'Google Fit / Health Connect API',
-    syncedCount: (loadGoogleSyncState().syncedCount || 0) + added + merged
-  };
-
-  saveUserActivities(list);
-  saveGoogleSyncState(syncState);
-
-  return {
-    addedCount: added,
-    mergedCount: merged,
-    activities: list,
-    syncState
-  };
-}
 
 /**
  * Creates and validates a manual user activity.
@@ -588,7 +439,6 @@ export function createManualActivity(params: {
 export function resetUserActivities(): UserActivity[] {
   try {
     localStorage.setItem(STORAGE_KEY_ACTIVITIES, JSON.stringify([]));
-    localStorage.removeItem(STORAGE_KEY_SYNC);
   } catch (e) {
     console.error('Failed to reset user activities:', e);
   }
