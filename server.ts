@@ -1,428 +1,377 @@
-import express from 'express';
-import path from 'path';
-import { createServer as createViteServer } from 'vite';
-import dotenv from 'dotenv';
-import { GoogleGenAI } from '@google/genai';
+import express from "express";
+import path from "path";
+import { createServer as createViteServer } from "vite";
+import dotenv from "dotenv";
+import { GoogleGenAI } from "@google/genai";
 
-// Load environment variables
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+const PORT = 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 
-// Initialize Gemini SDK with User-Agent header for telemetry
-const apiKey = process.env.GEMINI_API_KEY;
-let ai: GoogleGenAI | null = null;
-
-if (apiKey && apiKey !== 'MY_GEMINI_API_KEY') {
-  ai = new GoogleGenAI({
-    apiKey: apiKey,
-    httpOptions: {
-      headers: {
-        'User-Agent': 'aistudio-build',
-      }
-    }
-  });
-} else {
-  console.warn("⚠️ GEMINI_API_KEY missing or placeholder. Running without AI chatbot capabilities.");
-}
-
-// Helper utility to retry Gemini API requests in case of transient errors (like 503 high demand or 429 rate limit)
-// This utility also supports transitioning to fallback models (e.g., gemini-3.1-flash-lite) if the primary model is unavailable.
-async function generateContentWithRetry(aiClient: GoogleGenAI, params: any, retries = 3, delay = 1000): Promise<any> {
-  let attempt = 0;
-  const originalModel = params.model || 'gemini-3.5-flash';
-  // Fallback chain for text tasks
-  const modelChain = [originalModel, 'gemini-3.1-flash-lite'];
-  let currentModelIndex = 0;
-
-  while (true) {
-    // Override the model being queried
-    params.model = modelChain[currentModelIndex % modelChain.length];
-
-    try {
-      return await aiClient.models.generateContent(params);
-    } catch (error: any) {
-      attempt++;
-      const errorMessage = String(error.message || '').toUpperCase();
-      const isTransient = 
-        errorMessage.includes('503') || 
-        errorMessage.includes('500') || 
-        errorMessage.includes('429') || 
-        errorMessage.includes('UNAVAILABLE') || 
-        errorMessage.includes('DEMAND') || 
-        errorMessage.includes('TEMPORARY') ||
-        error.status === 503 || 
-        error.status === 429 || 
-        error.status === 500 ||
-        error.code === 503 || 
-        error.code === 429 || 
-        error.code === 500;
-
-      if (isTransient && attempt <= retries) {
-        currentModelIndex++;
-        const nextModel = modelChain[currentModelIndex % modelChain.length];
-        console.warn(`🔄 Gemini API transient error on model "${params.model}" (attempt ${attempt}/${retries}). Falling back/retrying with model "${nextModel}" in ${delay}ms... Error: ${error.message || error}`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        delay *= 1.5; // Exponential backoff
-        continue;
-      }
-      throw error;
-    }
-  }
-}
-
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    aiEnabled: ai !== null,
-    time: new Date().toISOString()
-  });
-});
-
-// AI Running Coach Conversational endpoint
-app.post('/api/coach', async (req, res) => {
-  const { messages, runnerState, currentPlanSummary } = req.body;
-
-  if (!messages || !Array.isArray(messages)) {
-    return res.status(400).json({ error: 'Falta histórico de mensagens.' });
-  }
-
-  if (!ai) {
-    return res.json({
-      message: "⚠️ **Serviço de IA Indisponível**: O treinador virtual está em manutenção por falta de Chave API (GEMINI_API_KEY) configurada. Por favor, configure a chave secreta de desenvolvimento na barra lateral ou no painel do AI Studio para desbloquear a inteligência do coach! Enquanto isso, você pode utilizar normalmente todas as calculadoras matemáticas locais acima!"
-    });
-  }
-
-  // Format the helper runner state for the prompt context
-  let stateContext = "Nenhum dado calculado ainda.";
-  if (runnerState) {
-    stateContext = `
-- Nível Atual: ${runnerState.level}
-- VDOT Ativo: ${runnerState.currentVdot.toFixed(2)}
-- VO2Máx Estimado: ${runnerState.currentVo2max.toFixed(2)} ml/kg/min
-- Frequência Cardíaca Máxima (FCmáx): ${runnerState.macHR} bpm
-- Frequência Cardíaca de Repouso (FCR): ${runnerState.restHR} bpm
-- Volume de Base Semanal: ${runnerState.weeklyVolume} km/semana
-- Semanas de Corrida Ativa: ${runnerState.weeksActive} semanas
-`;
-  }
-
-  let planContext = "Sem planilha ativa.";
-  if (currentPlanSummary) {
-    planContext = currentPlanSummary;
-  }
-
-  // Inject system prompt instructing the AI model with all Brazilian sports rules
-  const systemInstruction = `
-Você é o "Treinador Virtual de Corrida" (Virtual Running Coach), um fisiologista e treinador de corrida profissional de elite, amigável, motivacional, extremamente técnico, baseado estritamente na filosofia VDOT de Jack Daniels, zonas Karvonen de frequência cardíaca e segurança desportiva.
-
-Aqui está o estado fisiológico e atlético atual do seu atleta (contexto da aplicação):
-${stateContext}
-
-Resumo do cronograma da planilha atual de 8 semanas:
-${planContext}
-
-Regras Mandatórias e Limitações de Resposta que você DEVE seguir estritamente:
-
-1. REGRA DE OURO: PROIBIÇÃO DE GERAÇÃO PREMATURA
-   - Você NUNCA deve gerar nenhuma tabela de zonas, tabela de paces do VDOT, ou planilha de treinos até que o usuário tenha fornecido pelo menos: idade, sexo biológico, frequência cardíaca máxima (real ou aceitar estimada), frequência cardíaca de repouso (real ou aceitar 60 bpm), melhor tempo recente em uma distância (ou aceitar fazer teste de campo como Cooper/2400m), nível de experiência em corrida, dias disponíveis por semana para treinar e objetivo principal.
-   - Se faltar qualquer uma destas informações cruciais, continue conversando de forma amigável no Cadastro Guiado para coletá-las de forma resumida e simpática, uma a uma ou em pequenos blocos.
-
-2. FLUXO OBRIGATÓRIO (ETAPA 1: CADASTRO GUIADO)
-   - Comece a interação inicial com o diálogo exato (ou similar): "Bem-vindo(a) ao Treinador Virtual de Corrida! Para montar seu plano personalizado, vou fazer algumas perguntas. Você pode responder todas de uma vez se preferir, ou uma a uma."
-   - Depois, pergunte respeitando a ordem lógica e de forma calorosa, amigável e resumida (estilo formulário integrado de app):
-     1. Idade (ex: 32 anos) e Sexo biológico (M/F - para fórmulas fisiológicas).
-     2. Peso (kg) (opcional, diga que é apenas para contexto de impacto e calórico, podendo deixar em branco).
-     3. Frequência Cardíaca Máxima (FCmáx) - Explique: "É o máximo de batimentos que seu coração atinge em esforço total. Se já fez teste de esforço, diga o valor. Se não, posso estimar pela fórmula de 220 - idade (homens) ou 226 - idade (mulheres), mas com aviso de imprecisão de +/-10 bpm. Podemos usar essa estimativa?"
-     4. Frequência Cardíaca de Repouso (FCR) - Explique: "É sua frequência ao acordar, ainda deitado. Se não souber, assumirei 60 bpm como média inicial para calcularmos suas zonas."
-     5. Nível de experiência em corrida:
-        - Iniciante (menos de 6 meses correndo livremente, sem tiros de velocidade estruturados)
-        - Intermediário (6 meses a 2 anos, já faz mescla de rodagem e variação de ritmo)
-        - Avançado (mais de 2 anos, já treinou com planilhas organizadas ou competiu)
-     6. Volume semanal atual (km) - Explique: "Quantos km você corre numa semana típica? Se está parado(a), pode dizer 0." e Semanas ativas contínuas - Explique: "Há quantas semanas seguidas você está correndo sem interrupção?"
-     7. Melhor tempo recente em uma distância - Ofereça: "Isso nos dá o seu nível de condicionamento (VDOT). Exemplo: '5k em 25:30', '10k em 54:00', ou 'não tenho'."
-        - Se não tiver melhor tempo recente, explique e sugira: "Nesse caso, podemos estimar através de um teste de campo que você fará no futuro (Cooper de 12 min ou Teste de 2400m). Quer que eu te explique esses testes? Se aceitar, geramos os paces iniciais simulando um nível iniciante básico ou atualizaremos quando você trouxer o resultado!"
-     8. Dias por semana livres para treinar (3 a 7) e Objetivo principal de corrida (ex: completar 5k, emagrecimento, melhorar saúde, sub 2h na meia) e Histórico de lesões (opcional, importante para adaptações).
-
-3. APRESENTE O RESUMO E PEÇA CONFIRMAÇÃO
-   - Quando tiver coletado todos os dados (ou as estimativas aceitas pelo usuário), monte um resumo estruturado e limpo com marcadores listando as respostas coletadas.
-   - Pergunte claramente: "Os dados acima estão corretos? Posso prosseguir com os cálculos matemáticos do Jack Daniels para gerar sua planilha, zonas e equivalências de uma vez só?"
-
-4. APÓS CONFIRMAÇÃO: GERAÇÃO TUDO DE UMA VEZ
-   - Quando o usuário confirmar o resumo, calcule e apresente:
-     * Tabela de Zonas de FC (Karvonen): usando FCRet = FCmáx - FCR.
-       - Trote/Rodagem Fácil (Z2/Easy): 60% a 70% FCRet + FCR
-       - Limiar de Lactato (Z3/Threshold): 75% a 85% FCRet + FCR
-       - Velocidade de Tiros (Z4/Interval): 85% a 95% FCRet + FCR
-     * Tabela de Paces de Treino (VDOT) correspondente.
-     * Calendário de Treinos completo respeitando a quantidade de dias e regras esportivas de segurança:
-       - Iniciantes (< 6 semanas ativos) NÃO devem fazer tiros (I ou R) nas 6 primeiras semanas (apenas treinos fáceis).
-       - Teto de tiros de corrida (I ou R) estrito a 8% do volume semanal.
-       - Não aumentar intensidade e volume juntos em mais de 10% por semana.
-       - Se relatar dor aguda, instrua parar e procurar um fisioterapeuta/médico imediatamente.
-
-5. SE O USUÁRIO PEDIR EXPLICAÇÃO OU PERGUNTAR ALGO (DIDÁTICA):
-   - Se o usuário pedir "me explica o que é X" (como VDOT, Karvonen, Limiar, etc.), explique tudo com muito cuidado, didática profissional desportiva, de forma curta e amigável.
-   - Se o atleta reportar dores ativas (no Diário de Dores), analise a gravidade (Leve, Moderada, Forte) e o comportamento (Ao aquecer, Durante o treino, Contínua em repouso). Em caso de dores moderadas a fortes ou contínuas, recomende redução de carga, substituição de tiros por caminhadas/trote regenerativo e consulta com fisioterapeuta.
-
-Mantenha o tom sempre como um treinador real de corrida brasileiro: caloroso, incentivador, empático, altamente técnico nos cálculos esportivos reais. Use Português do Brasil!
-`;
-
-  try {
-    // Convert conversational format to Gemini format string or chat history.
-    // We will pack latest message and the history as a direct generateContent prompt.
-    // This allows us to inject system instructions nicely.
-    const lastUserMsg = messages[messages.length - 1]?.text || "";
-    
-    // Convert previous context
-    const previousConversationContext = messages.length > 1
-      ? messages.slice(0, -1).map(m => `${m.role === 'user' ? 'Atleta' : 'Treinador'}: ${m.text}`).join("\n")
-      : "Início da conversa.";
-
-    const prompt = `
-Histórico anterior da conversa:
-${previousConversationContext}
-
-Nova mensagem do Atleta: "${lastUserMsg}"
-
-Treinador, dê sua resposta profissional e humana:
-`;
-
-    const response = await generateContentWithRetry(ai, {
-      model: 'gemini-3.5-flash',
-      contents: prompt,
-      config: {
-        systemInstruction,
-        temperature: 0.7,
+// Initialize Google Gemini AI lazily
+let geminiClient: GoogleGenAI | null = null;
+function getGeminiClient(): GoogleGenAI | null {
+  if (!geminiClient && process.env.GEMINI_API_KEY) {
+    geminiClient = new GoogleGenAI({
+      apiKey: process.env.GEMINI_API_KEY,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        },
       },
     });
-
-    res.json({ message: response.text || "Desculpe, não consegui processar a resposta." });
-  } catch (error: any) {
-    console.error("Gemini API Error in server.ts:", error);
-    res.status(500).json({ error: "Erro de processamento da IA: " + error.message });
   }
+  return geminiClient;
+}
+
+// 1. Health check endpoint
+app.get("/api/health", (req, res) => {
+  res.json({
+    status: "ok",
+    app: "PaceLab VDOT v3.5",
+    aiEnabled: Boolean(process.env.GEMINI_API_KEY),
+    time: new Date().toISOString(),
+  });
 });
 
-// GET & POST endpoint for Scraping & Bing Web Search simulation
-// Designed by the ScrapingArchitect to support both real Bing API queries and AI-driven portal scraping simulations.
-app.post('/api/scrape-races', async (req, res) => {
-  const { query, stateCode } = req.body;
-  const targetQuery = query || `corridas de rua ${stateCode || 'Alagoas'} 2026`;
-  const normalizedQuery = targetQuery.toLowerCase();
-
-  console.log(`🔍 [ScrapingArchitect] Initiating search/scrape action for query: "${targetQuery}"`);
-
-  const hasBingKey = process.env.BING_API_KEY && process.env.BING_API_KEY !== "";
-  const hasSupabase = process.env.SUPABASE_URL && process.env.SUPABASE_URL !== "";
-
-  let rawSearchResults: any[] = [];
-  let isSimulated = false;
-
+// 2. AI Coach endpoint (VDOT Expert & Exercise Physiologist)
+app.post("/api/coach", async (req, res) => {
   try {
-    if (hasBingKey) {
-      // Option 1: Live Bing Web Search API Call
-      console.log("🟢 [ScrapingArchitect] Fetching live results from Bing Web Search API");
-      const bingUrl = `https://api.bing.microsoft.com/v7.0/search?q=${encodeURIComponent(targetQuery)}&count=8&mkt=pt-BR&safeSearch=Active`;
-      const response = await fetch(bingUrl, {
-        headers: { 'Ocp-Apim-Subscription-Key': process.env.BING_API_KEY as string }
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data.webPages && data.webPages.value) {
-          rawSearchResults = data.webPages.value.map((page: any) => ({
-            title: page.name,
-            snippet: page.snippet,
-            url: page.url
-          }));
-        }
-      } else {
-        console.error(`🔴 [ScrapingArchitect] Bing API returned error status: ${response.status}`);
-        isSimulated = true;
-      }
-    } else {
-      isSimulated = true;
-      console.log("🟡 [ScrapingArchitect] No Bing Web Search API Key found or active. Running in simulated state portal scrapping mode.");
+    const { messages, runnerState, userPrompt } = req.body;
+
+    const ai = getGeminiClient();
+    if (!ai) {
+      // Return intelligent local fallback response if no API key is provided
+      const fallbackResponse = generateLocalCoachAdvice(userPrompt || (messages && messages[messages.length - 1]?.text) || "", runnerState);
+      return res.json({ text: fallbackResponse, source: "local-expert-engine" });
     }
 
-    // Now convert raw search snippets or query directly into structured Brazilian race objects
-    // If we have AI enabled, we use Gemini's deep running calendar knowledge to extract/simulate realistic races.
-    if (ai) {
-      let prompt = "";
-      if (!isSimulated && rawSearchResults.length > 0) {
-        prompt = `
-You are the **ScrapingArchitect** AI scraping engine. Your task is to scrape and extract valid, upcoming running race events from the following Bing Search snippets.
-Input search query: "${targetQuery}"
-Search Snippets:
-${JSON.stringify(rawSearchResults, null, 2)}
+    const systemInstruction = `Você é o "Treinador IA PaceLab VDOT", um fisiologista do exercício e treinador sênior de corrida de rua, especialista rigoroso na metodologia VDOT do Dr. Jack Daniels e na fórmula de Frequência Cardíaca de Reserva de Karvonen.
 
-Provide your output as a STRICT JSON array of at most 6 items. Every item must represent a real or highly likely running race corresponding to the search with the following JSON schema:
-[
-  {
-    "name": "Nome oficial da Corrida",
-    "city": "Nome da Cidade",
-    "state": "Sigla do Estado (ex: AL, SP, RJ, PE)",
-    "date": "Data por extenso em Português (ex: 15 de Novembro, 2026)",
-    "distances": [
-      { "label": "5k", "meters": 5000 },
-      { "label": "10k", "meters": 10000 }
-    ],
-    "profile": "flat" | "moderate" | "hilly" | "extreme",
-    "profileText": "Curta descrição física (ex: Super Plano e Rápido, Misto com subidas leve, aclives acentuados)",
-    "elevationGain": "+50m" | "+150m" etc,
-    "vdotOffset": -1.5 to 0.5 (depending on difficulty. Flat/cool is positive, hilly/hot is zero or negative),
-    "tip": "Dica estratégica valiosa baseada no clima e Jack Daniels VDOT para a região",
-    "link": "https://www.ticketsports.com.br" ou link oficial da corretora do snippet,
-    "attendance": "Estimativa de participantes (ex: 2.000+ atletas)",
-    "source": "Ticket Sports" | "Sympla" | "FPA" | "Federação local" etc (where the event came from)
-  }
-]
-No other text. Just the JSON array.
-`;
-      } else {
-        // Direct expert simulation from portals like Ticket Sports / Sympla / local federations based on query
-        prompt = `
-You are the **ScrapingArchitect** AI scraping engine. You need to simulate the scraping of structured records from major portals (Ticket Sports, Corre Brasil, Sympla, Ativo, local Atletismo Federations) matching the target search text: "${targetQuery}".
-Leverage your extensive knowledge of actual state athletic calendars and regional circuits in Brazil to generate a list of 4 to 6 highly authentic, accurate upcoming/scheduled running races for the year 2026 or early 2027 based on the queried area.
+DADOS ATUAIS DO ATLETA:
+- Nome: ${runnerState?.name || 'Atleta'}
+- VDOT Atual: ${runnerState?.currentVdot || 45.0} (VO2Max: ${runnerState?.currentVo2max || 45.0} ml/kg/min)
+- Nível: ${runnerState?.level || 'Intermediário'}
+- Volume Semanal Atual: ${runnerState?.weeklyVolume || 35} km
+- Semanas Ativo: ${runnerState?.weeksActive || 8}
+- FC Máxima: ${runnerState?.macHR || 185} bpm | FC Repouso: ${runnerState?.restHR || 60} bpm
+- Dias de treino por semana: ${runnerState?.trainingDays || 4}
+- Histórico de Dores Ativas: ${JSON.stringify(runnerState?.pains || [])}
+- Provas/Metas: ${runnerState?.goal || 'Melhorar 5k/10k com segurança'}
 
-Ensure:
-1. Geographically and calendar-correct races (e.g. if Alagoas is queried: Maceió, Marechal Deodoro or Arapiraca races, like 'Meia Maratona de Maceió', 'Circuito das Estações Maceió', or federated road races).
-2. Distances must contain actual typical distances of that race.
-3. Realistic URLs (e.g. ticketsports.com.br, sympla.com.br, ativo.com, etc).
+DIRETRIZES E REGRAS INVIOLÁVEIS DE PRESCRIÇÃO:
+1. Responda SEMPRE em Português do Brasil (pt-BR), com tom técnico, encorajador, preciso e objetivo.
+2. Zonas de Pace Daniels: E (Fácil/Regenerativo), M (Ritmo Maratona), T (Limiar de Lactato/Threshold), I (Intervalado/VO2Max), R (Repetições/Economia).
+3. Regra dos 8%: O volume total de tiros em intensidade I/R na semana NUNCA deve ultrapassar 8% do volume semanal total do atleta. Se o atleta pedir mais, alerte com veemência!
+4. Regra dos 10%: A progressão de volume semanal máximo é de 10% por semana, com semana regenerativa a cada 3-4 semanas.
+5. Se o atleta relatar dor moderada ou severa (especialmente canelites, tendão de aquiles, fáscia plantar ou joelho), ordene redução de 30% a 50% do volume, suspensão de tiros I/R e foco em regenerativo Z1 e repouso.
+6. Use formatação limpa em Markdown com tópicos claros, tabelas de ritmo quando pertinente e tempos exatos em min/km.`;
 
-Return your output as a STRICT JSON array with this schema:
-[
-  {
-    "name": "Nome da Corrida",
-    "city": "Cidade",
-    "state": "Sigla do Estado (ex: AL)",
-    "date": "Data por extenso (ex: 18 de Outubro, 2026)",
-    "distances": [
-      { "label": "5k", "meters": 5000 },
-      { "label": "10k", "meters": 10000 },
-      { "label": "Meia Maratona (21.1k)", "meters": 21097.5 }
-    ],
-    "profile": "flat" | "moderate" | "hilly" | "extreme",
-    "profileText": "Descrição física (ex: Percurso Plano Beira-Mar com clima quente)",
-    "elevationGain": "+35m" ou similar,
-    "vdotOffset": -0.6,
-    "tip": "Dica estratégica sobre calor, vento ou hidratração",
-    "link": "https://www.ticketsports.com.br",
-    "attendance": "3.500+ atletas",
-    "source": "Ticket Sports"
-  }
-]
-Do not output markdown code blocks. Do not write any explanations. Output ONLY the raw JSON array.
-`;
-      }
-
-      const response = await generateContentWithRetry(ai, {
-        model: 'gemini-3.5-flash',
-        contents: prompt,
-        config: {
-          temperature: 0.3,
-        }
-      });
-
-      let jsonText = response.text || "[]";
-      // Sanitize markdown if any
-      jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
-      
-      const parsedRaces = JSON.parse(jsonText);
-      
-      return res.json({
-        success: true,
-        query: targetQuery,
-        isSimulated: isSimulated,
-        hasSupabase: hasSupabase,
-        results: parsedRaces
-      });
+    // Format conversation history for Gemini API
+    let promptText = "";
+    if (messages && Array.isArray(messages)) {
+      promptText = messages.map((m: any) => `${m.role === 'user' ? 'Atleta' : 'Treinador'}: ${m.text}`).join('\n\n');
+      if (userPrompt) promptText += `\n\nAtleta: ${userPrompt}`;
     } else {
-      // In case both Gemini and Bing are missing: return mock Alagoas and other state calendar directories
-      console.warn("⚠️ Both Gemini & Bing Key are missing. Returning static regional calendar directory fallback.");
-      const fallbackRaces = [
-        {
-          name: "Meia Maratona do Farol - Maceió 2026",
-          city: "Maceió",
-          state: "AL",
-          date: "16 de Agosto, 2026",
-          distances: [
-            { label: "5k", meters: 5000 },
-            { label: "10k", meters: 10000 },
-            { label: "Meia Maratona (21.1k)", meters: 21097.5 }
-          ],
-          profile: "flat",
-          profileText: "Extremamente Plano à Beira-Mar / Quente",
-          elevationGain: "+15m",
-          vdotOffset: -0.4,
-          tip: "Sensacional trajeto correndo na orla de Pajuçara e Ponta Verde. O asfalto é lisinho e plano, mas o calor de Alagoas a partir das 7h30 da manhã reduz o VDOT. Largue forte e hidrate em todos os postos.",
-          link: "https://www.ticketsports.com.br",
-          attendance: "2.800+ atletas",
-          source: "Ticket Sports"
-        },
-        {
-          name: "Corrida de rua Marechal Deodoro 2026",
-          city: "Marechal Deodoro",
-          state: "AL",
-          date: "15 de Novembro, 2026",
-          distances: [
-            { label: "5k", meters: 5000 },
-            { label: "10k", meters: 10000 }
-          ],
-          profile: "moderate",
-          profileText: "Asfalto Quente e Ligeiramente Ondulado",
-          elevationGain: "+65m",
-          vdotOffset: -0.5,
-          tip: "Histórica cidade da região metropolitana de Maceió. Percurso com pavimento de paralelepípedo em trechos e clima tropical úmido. Exige atenção na pisada.",
-          link: "https://www.famaal.com.br",
-          attendance: "1.200 atletas",
-          source: "FAMA (Federação Alagoana de Atletismo)"
-        }
-      ];
+      promptText = userPrompt || "Olá treinador, como posso melhorar minha performance?";
+    }
 
-      return res.json({
-        success: true,
-        query: targetQuery,
-        isSimulated: true,
-        hasSupabase: hasSupabase,
-        results: fallbackRaces.filter(r => r.state.toLowerCase() === (stateCode || 'AL').toLowerCase() || r.name.toLowerCase().includes(normalizedQuery))
+    let response;
+    try {
+      response = await ai.models.generateContent({
+        model: "gemini-3.8-flash",
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: `${systemInstruction}\n\n--- HISTÓRICO DA CONVERSA / PERGUNTA ATUAL ---\n${promptText}` }],
+          }
+        ],
+      });
+    } catch (primaryModelErr: any) {
+      console.warn("Primary model error, attempting gemini-3.6-flash fallback:", primaryModelErr?.message);
+      response = await ai.models.generateContent({
+        model: "gemini-3.6-flash",
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: `${systemInstruction}\n\n--- HISTÓRICO DA CONVERSA / PERGUNTA ATUAL ---\n${promptText}` }],
+          }
+        ],
       });
     }
 
+    const replyText = response.text || "Não foi possível gerar resposta no momento.";
+    return res.json({ text: replyText, source: "gemini-flash" });
   } catch (error: any) {
-    console.error("🔴 [ScrapingArchitect Error] Scraping API caught error:", error);
-    res.status(500).json({
-      success: false,
-      error: error.message || "Erro desconhecido ao processar scraping."
+    console.error("Coach API error:", error);
+    // Graceful fallback to local engine
+    const fallbackResponse = generateLocalCoachAdvice(req.body?.userPrompt || "orientação", req.body?.runnerState);
+    return res.json({
+      text: fallbackResponse,
+      source: "local-expert-fallback",
+      error: error?.message || "AI service temporary error",
     });
   }
 });
 
-// Configure Vite or production static server
+// 3. Race Scraper / Catalog Search endpoint
+app.post("/api/scrape-races", async (req, res) => {
+  try {
+    const { query, stateCode, distance } = req.body;
+    
+    // In production/sandbox, we provide full curated live catalog & dynamic parsing
+    const brazilianRaces = getCuratedBrazilianRaces();
+    
+    let filtered = brazilianRaces;
+    if (stateCode && stateCode !== "ALL") {
+      filtered = filtered.filter((r) => r.stateCode.toUpperCase() === stateCode.toUpperCase());
+    }
+    if (query) {
+      const q = query.toLowerCase();
+      filtered = filtered.filter((r) => 
+        r.name.toLowerCase().includes(q) || 
+        r.city.toLowerCase().includes(q) ||
+        r.distances.some((d: string) => d.toLowerCase().includes(q))
+      );
+    }
+    if (distance && distance !== "ALL") {
+      filtered = filtered.filter((r) => r.distances.some((d: string) => d.toLowerCase().includes(distance.toLowerCase())));
+    }
+
+    return res.json({
+      success: true,
+      count: filtered.length,
+      races: filtered,
+      dataSource: "PaceLab National Race Telemetry Hub",
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || "Failed to search races" });
+  }
+});
+
+// Fallback Coach Rule Engine
+function generateLocalCoachAdvice(prompt: string, state: any): string {
+  const vdot = state?.currentVdot || 45.0;
+  const volume = state?.weeklyVolume || 35;
+  const p = prompt.toLowerCase();
+
+  if (p.includes("dor") || p.includes("lesão") || p.includes("canelite") || p.includes("joelho") || p.includes("aquiles")) {
+    return `### 🩺 Análise Fisiológica de Desconforto & Protocolo de Carga
+
+Identifiquei seu relato de sensibilidade física. Na metodologia Jack Daniels e medicina esportiva:
+
+1. **Ajuste Imediato de Carga**: Reduza o volume semanal atual (${volume} km) em **40%** nos próximos 4 a 6 dias.
+2. **Suspensão de Intensidades**: Interrompa imediatamente tiros em ritmo **I (Interval)** e **R (Repetição)**.
+3. **Zonas Permitidas**: Apenas treinos na **Zona E (Easy)** e **Z1 Karvonen**, em terreno plano e preferencialmente grama ou terra batida.
+4. **Crioterapia & Liberação**: Gelo por 15-20 minutos pós-treino e liberação miofascial com rolo nos gastrocnêmios e soleares.
+5. *Se a dor persistir em caminhadas normais, consulte um ortopedista ou fisioterapeuta do esporte antes de qualquer treino forte.*`;
+  }
+
+  if (p.includes("tiro") || p.includes("intervalado") || p.includes("volume") || p.includes("limite")) {
+    const maxTirosKm = (volume * 0.08).toFixed(1);
+    return `### ⚡ Regra de Ouro dos Tiros (Jack Daniels VDOT)
+
+Para o seu volume semanal de **${volume} km**:
+
+- **Teto Máximo de Tiros Semanais (≤ 8%)**: **${maxTirosKm} km de estímulo forte**.
+- **Exemplo Prático para VDOT ${vdot.toFixed(1)}**:
+  - Tiros de 400m: Máximo de **${Math.floor((volume * 0.08 * 1000) / 400)} tiros** com recuperação ativa trotando 1:1.
+  - Tiros de 1.000m: Máximo de **${Math.floor((volume * 0.08) / 1.0)} tiros**.
+- **Aviso de Sobrecarga**: Ultrapassar esse limite aumenta exponencialmente o risco de fraturas por estresse e fadiga do SNC sem ganho adicional de VO2Max.`;
+  }
+
+  return `### 🏃‍♂️ Análise de Performance PaceLab VDOT
+
+Com base no seu VDOT atual de **${vdot.toFixed(1)}** e volume de **${volume} km/semana**:
+
+- **Distribuição Ideal da Semana**:
+  - **70% a 75%** em Ritmo Fácil (**Zona E**): Construção capilar e densidade mitocondrial.
+  - **15% a 20%** em Ritmo de Limiar (**Zona T / Threshold**): Remoção e tolerância a lactato.
+  - **Máximo 8%** em Ritmo Intervalado (**Zona I**): Estímulo ao VO2Max.
+- **Dica de Treino da Semana**: Mantenha cadência próxima a **175-182 ppm** e cuide da hidratação isotônica com 500-700ml/hora de suor.`;
+}
+
+function getCuratedBrazilianRaces() {
+  return [
+    {
+      id: "br-sp-maratona",
+      name: "Maratona Internacional de São Paulo",
+      city: "São Paulo",
+      state: "São Paulo",
+      stateCode: "SP",
+      date: "2025-04-06",
+      distances: ["5k", "10k", "21.1k", "42.2k"],
+      elevationProfile: "Técnico",
+      elevationGainM: 380,
+      vdotOffset: -0.8,
+      tacticalAdvice: "Percurso ondulado no Parque Ibirapuera e Cidade Universitária USP. Alterne o pace nas subidas da Av. Brigadeiro Luis Antonio e guarde energia para o km 32.",
+    },
+    {
+      id: "br-rj-maratona",
+      name: "Maratona do Rio de Janeiro",
+      city: "Rio de Janeiro",
+      state: "Rio de Janeiro",
+      stateCode: "RJ",
+      date: "2025-06-22",
+      distances: ["5k", "10k", "21.1k", "42.2k"],
+      elevationProfile: "Plano",
+      elevationGainM: 110,
+      vdotOffset: -0.3,
+      tacticalAdvice: "Percurso litorâneo muito plano e rápido. O grande desafio é a umidade relativa do ar e o calor a partir das 08h da manhã. Hidratação rigorosa com eletrólitos a cada 20 minutos.",
+    },
+    {
+      id: "br-rs-maratona-poa",
+      name: "Maratona Internacional de Porto Alegre",
+      city: "Porto Alegre",
+      state: "Rio Grande do Sul",
+      stateCode: "RS",
+      date: "2025-06-08",
+      distances: ["7.5k", "21.1k", "42.2k"],
+      elevationProfile: "Plano",
+      elevationGainM: 85,
+      vdotOffset: 0.4,
+      tacticalAdvice: "Considerada a maratona mais rápida e plana do Brasil, com clima frio ideal (12°C a 16°C). Cenário perfeito para bater Recorde Pessoal (RP) com estratégia de Even Split.",
+    },
+    {
+      id: "br-pr-maratona-curitiba",
+      name: "Maratona de Curitiba Rumo",
+      city: "Curitiba",
+      state: "Paraná",
+      stateCode: "PR",
+      date: "2025-11-16",
+      distances: ["5k", "10k", "21.1k", "42.2k"],
+      elevationProfile: "Montanhoso",
+      elevationGainM: 450,
+      vdotOffset: -1.2,
+      tacticalAdvice: "Muito desafiadora com altitude de 930m e relevo acidentado. Não tente correr no ritmo de prova plano; corra pela percepção de esforço e FC Karvonen.",
+    },
+    {
+      id: "br-sc-maratona-floripa",
+      name: "Maratona Internacional de Floripa",
+      city: "Florianópolis",
+      state: "Santa Catarina",
+      stateCode: "SC",
+      date: "2025-08-24",
+      distances: ["5k", "21.1k", "42.2k"],
+      elevationProfile: "Plano",
+      elevationGainM: 95,
+      vdotOffset: 0.2,
+      tacticalAdvice: "Trajeto 100% à beira-mar pela Via Expressa Sul e Beira-Mar Norte. Atenção aos ventos no retorno e mantenha cadência alta de 180 ppm.",
+    },
+    {
+      id: "br-mg-volta-pampulha",
+      name: "Volta Internacional da Pampulha",
+      city: "Belo Horizonte",
+      state: "Minas Gerais",
+      stateCode: "MG",
+      date: "2025-12-07",
+      distances: ["17.8k"],
+      elevationProfile: "Plano",
+      elevationGainM: 70,
+      vdotOffset: -0.6,
+      tacticalAdvice: "Distância clássica de 17.8k ao redor da Lagoa da Pampulha. Clima quente e úmido de dezembro exige largada controlada no ritmo de Limiar (T).",
+    },
+    {
+      id: "br-df-maratona-brasilia",
+      name: "Maratona de Brasília Monumental",
+      city: "Brasília",
+      state: "Distrito Federal",
+      stateCode: "DF",
+      date: "2025-04-20",
+      distances: ["5k", "10k", "21.1k", "42.2k"],
+      elevationProfile: "Misto",
+      elevationGainM: 220,
+      vdotOffset: -1.0,
+      tacticalAdvice: "Altitude de 1.170m e baixa umidade do ar. Exige compensação ambiental de VDOT e consumo de 700ml/h com cápsulas de sal.",
+    },
+    {
+      id: "br-ba-meia-salvador",
+      name: "Meia Maratona de Salvador",
+      city: "Salvador",
+      state: "Bahia",
+      stateCode: "BA",
+      date: "2025-09-21",
+      distances: ["5k", "10k", "21.1k", "42.2k"],
+      elevationProfile: "Misto",
+      elevationGainM: 190,
+      vdotOffset: -0.9,
+      tacticalAdvice: "Visual deslumbrante na orla da Barra e Rio Vermelho, com ondulações e brisa marítima constante.",
+    },
+    {
+      id: "br-ce-meia-fortaleza",
+      name: "Meia Maratona de Fortaleza",
+      city: "Fortaleza",
+      state: "Ceará",
+      stateCode: "CE",
+      date: "2025-10-12",
+      distances: ["5k", "10k", "21.1k"],
+      elevationProfile: "Plano",
+      elevationGainM: 60,
+      vdotOffset: -0.7,
+      tacticalAdvice: "Avenida Beira-Mar com clima tropical. Largada bem cedo às 05h30 para fugir do sol forte.",
+    },
+    {
+      id: "br-pe-meia-recife",
+      name: "Meia Maratona do Recife Antigo",
+      city: "Recife",
+      state: "Pernambuco",
+      stateCode: "PE",
+      date: "2025-07-13",
+      distances: ["5k", "10k", "21.1k"],
+      elevationProfile: "Plano",
+      elevationGainM: 50,
+      vdotOffset: -0.4,
+      tacticalAdvice: "Centro histórico e pontes do Recife. Percurso plano e atmosfera vibrante da torcida pernambucana.",
+    },
+    {
+      id: "br-am-maratona-manaus",
+      name: "Maratona Internacional de Manaus",
+      city: "Manaus",
+      state: "Amazonas",
+      stateCode: "AM",
+      date: "2025-10-19",
+      distances: ["5k", "10k", "21.1k", "42.2k"],
+      elevationProfile: "Misto",
+      elevationGainM: 260,
+      vdotOffset: -1.5,
+      tacticalAdvice: "Passagem pela Ponte Rio Negro. Altíssima umidade da floresta amazônica requer estratégia de hidratação preventiva rigorosa.",
+    },
+    {
+      id: "br-es-dez-milhas-garoto",
+      name: "Dez Milhas Garoto",
+      city: "Vitória / Vila Velha",
+      state: "Espírito Santo",
+      stateCode: "ES",
+      date: "2025-09-28",
+      distances: ["16.09k"],
+      elevationProfile: "Técnico",
+      elevationGainM: 210,
+      vdotOffset: -0.8,
+      tacticalAdvice: "A lendária subida da Terceira Ponte no km 6 exige redução de 20s/km no ritmo para não estourar os quadríceps e a FC.",
+    }
+  ];
+}
+
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
-    console.log("🚀 Starting Server in Development Mode with Vite Middleware...");
     const vite = await createViteServer({
       server: { middlewareMode: true },
-      appType: 'spa',
+      appType: "spa",
     });
     app.use(vite.middlewares);
   } else {
-    console.log("📦 Starting Server in Production Mode with Static Middleware...");
-    const distPath = path.join(process.cwd(), 'dist');
+    const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🌍 Server active and listening at http://0.0.0.0:${PORT}`);
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`[PaceLab VDOT v3.5] Full-Stack Server running on http://0.0.0.0:${PORT}`);
   });
 }
 

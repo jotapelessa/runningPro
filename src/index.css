@@ -1,56 +1,149 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;650;700;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
-@theme {
-  --font-sans: "Inter", system-ui, sans-serif;
-  --font-display: "Space Grotesk", sans-serif;
-  --font-mono: "JetBrains Mono", monospace;
+@layer base {
+  :root {
+    --font-title: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    
+    --bg-main: #050505;
+    --bg-card: #0A0A0A;
+    --bg-elevated: #121214;
+    --border-subtle: rgba(255, 255, 255, 0.08);
+    --border-hover: rgba(255, 255, 255, 0.15);
+    
+    --accent-orange: #FF4E00;
+    --accent-orange-hover: #E03E00;
+    --accent-orange-glow: rgba(255, 78, 0, 0.35);
+  }
 
-  /* Custom Neon Orange elements for VDOT accent */
-  --color-vdot-orange: #FF4E00;
-  --color-vdot-orange-hover: #E03E00;
+  body {
+    font-family: var(--font-sans);
+    background-color: #050505;
+    color: #E0E0E0;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, h4, .font-heading, .font-telemetry {
+    font-family: var(--font-title);
+    letter-spacing: -0.02em;
+  }
+
+  .font-mono-data, code, pre {
+    font-family: var(--font-mono);
+  }
 }
 
-body {
-  font-family: var(--font-sans);
-  background-color: #050505;
-  color: #E0E0E0;
+/* Custom Telemetry Glows and Neon Accents */
+.telemetry-grid {
+  background-size: 32px 32px;
+  background-image: 
+    linear-gradient(to right, rgba(255, 78, 0, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 78, 0, 0.03) 1px, transparent 1px);
 }
 
-/* Ensure clean input visual overrides globally for form fields */
-input, select, textarea {
-  background-color: #0A0A0A !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  color: #FFFFFF !important;
+.telemetry-card {
+  background: #0A0A0A;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-input:focus, select:focus, textarea:focus {
-  border-color: #FF4E00 !important;
-  box-shadow: 0 0 10px rgba(255, 78, 0, 0.35) !important;
-  outline: none !important;
+.telemetry-card:hover {
+  border-color: rgba(255, 255, 255, 0.15);
 }
 
-/* Custom scrollbars */
+.telemetry-card-active {
+  background: #0F0D0C;
+  border: 1px solid rgba(255, 78, 0, 0.45);
+  box-shadow: 0 0 24px rgba(255, 78, 0, 0.15);
+}
+
+.glow-orange {
+  box-shadow: 0 0 20px rgba(255, 78, 0, 0.35);
+}
+
+.glow-orange-sm {
+  box-shadow: 0 0 10px rgba(255, 78, 0, 0.25);
+}
+
+.glow-green {
+  box-shadow: 0 0 16px rgba(34, 197, 94, 0.25);
+}
+
+.glow-red {
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.25);
+}
+
+/* Custom Scrollbars */
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+.no-scrollbar {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
+
 ::-webkit-scrollbar-track {
-  background: #050505;
+  background: #080808;
 }
+
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 99px;
+  background: #222222;
+  border-radius: 4px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: #FF4E00;
 }
 
-/* Additional visual details */
-.scrollbar-none::-webkit-scrollbar {
-  display: none;
+/* Custom Form Controls */
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: #FF4E00 !important;
+  box-shadow: 0 0 0 1px #FF4E00, 0 0 12px rgba(255, 78, 0, 0.25) !important;
 }
-.scrollbar-none {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+
+/* Animations */
+@keyframes pulse-orange {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.05);
+  }
+}
+
+.animate-pulse-orange {
+  animation: pulse-orange 2.5s infinite ease-in-out;
+}
+
+/* Print Styles */
+@media print {
+  body {
+    background: #FFFFFF !important;
+    color: #000000 !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  .telemetry-card {
+    background: #FFFFFF !important;
+    border: 1px solid #CCCCCC !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+  }
 }

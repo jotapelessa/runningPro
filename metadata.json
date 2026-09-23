@@ -1,1 +1,6 @@
-{"name":"Calculadora de Corrida e Treinador VDOT","description":"Calculadora VDOT procedimental, estimador de VO2Máx por Cooper/2400m, zonas Karvonen de FC e gerador de planilhas de 8 semanas periodizadas com coach de IA integrado.","requestFramePermissions":[],"majorCapabilities":["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]}
+{
+  "name": "PaceLab VDOT v3.5",
+  "description": "Sistema avançado de telemetria cinética, cálculo de VDOT, zonas de treino fisiológicas, previsões de prova e periodização de 8 semanas para corredores.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,407 +1,419 @@
 import React, { useState } from 'react';
 import { 
   BookOpen, 
-  HelpCircle, 
-  CheckCircle2, 
-  Target, 
-  Flame, 
-  Zap, 
-  Sparkles, 
-  Activity, 
-  Compass, 
+  UserCheck, 
+  Gauge, 
   Calendar, 
-  TrendingUp, 
-  Heart, 
   ChevronDown, 
-  ChevronUp, 
+  HelpCircle, 
+  Flame, 
+  Watch, 
+  MapPin, 
   ArrowRight,
-  ShieldAlert,
-  Info,
-  Sliders,
-  UserCheck,
+  ShieldCheck,
+  CheckCircle2,
+  HeartPulse,
   Award
 } from 'lucide-react';
-import { RunnerState } from '../types';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface GuideTabProps {
-  runnerState: RunnerState;
-  onOpenProfileModal: () => void;
-  onNavigateTab: (tab: 'calculator' | 'plan' | 'predictor' | 'recovery' | 'races') => void;
+  onOpenAthleteModal: () => void;
+  onNavigateTab: (tab: 'guide' | 'importer' | 'zonas' | 'planilha' | 'previsoes' | 'recuperacao' | 'corridas') => void;
 }
 
-export default function GuideTab({ runnerState, onOpenProfileModal, onNavigateTab }: GuideTabProps) {
-  const [openFaq, setOpenFaq] = useState<number | null>(0);
-  const [selectedPaceZone, setSelectedPaceZone] = useState<'E' | 'M' | 'T' | 'I' | 'R'>('E');
+export const GuideTab: React.FC<GuideTabProps> = ({ onOpenAthleteModal, onNavigateTab }) => {
+  const [selectedZone, setSelectedZone] = useState<'E' | 'M' | 'T' | 'I' | 'R'>('E');
+  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
 
-  const toggleFaq = (index: number) => {
-    setOpenFaq(openFaq === index ? null : index);
-  };
-
-  // Pace Zones Details
-  const paceZoneInfo = {
+  const zonesGuide = {
     E: {
-      title: 'Zona E — Fácil / Corrida Leve (Easy Pace)',
-      badge: '60% - 79% VDOT',
-      color: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400',
-      description: 'Ritmo conversacional e regenerativo. Essencial para construir base aeróbica, fortalecer tendões e vascularização muscular sem gerar estresse excessivo.',
-      whenToUse: 'Aquecimentos, desaquecimentos, treinos regenerativos e nos treinos longos de base.',
-      tip: 'Você deve ser capaz de manter uma conversa em frases completas sem ficar ofegante.'
+      name: 'Zona E — Easy / Rodagem & Regenerativo',
+      pctVdot: '62% a 72% do VO2max / 65% a 79% FCmax',
+      color: '#22C55E',
+      objective: 'Construção da base aeróbica, proliferação mitocondrial, aumento da densidade capilar periférica e fortalecimento articular sem estresse mecânico severo.',
+      whenToUse: 'Em dias de recuperação ativa, treinos longos de final de semana e aquecimentos/desaquecimentos.',
+      tip: 'Mantenha um ritmo onde você consiga conversar confortavelmente em frases completas sem perder o fôlego.'
     },
     M: {
-      title: 'Zona M — Pace de Maratona (Marathon Pace)',
-      badge: '80% - 85% VDOT',
-      color: 'border-blue-500/40 bg-blue-500/10 text-blue-400',
-      description: 'Ritmo sustentado e aeróbico específico para provas longas. Ensina o corpo a utilizar gordura como fonte primária de energia em ritmos mais fortes.',
-      whenToUse: 'Blocos específicos em treinos longos e simulados para Maratona ou Meia Maratona.',
-      tip: 'Ritmo firme, porém você não sente acúmulo de ácido lático imediato.'
+      name: 'Zona M — Ritmo de Maratona',
+      pctVdot: '79% a 85% do VO2max / 80% a 87% FCmax',
+      color: '#3B82F6',
+      objective: 'Adaptação neuromuscular ao ritmo alvo de 42k, eficiência no consumo de glicogênio e calibração da percepção de esforço prolongado.',
+      whenToUse: 'Em blocos específicos dentro do treino longo (ex: 20k com 8k em ritmo M) na fase específica.',
+      tip: 'Excelente para testar sua estratégia de nutrição intra-treino (géis e hidratação) no ritmo exato do seu desafio.'
     },
     T: {
-      title: 'Zona T — Limiar de Lactato (Threshold Pace)',
-      badge: '86% - 90% VDOT',
-      color: 'border-amber-500/40 bg-amber-500/10 text-amber-400',
-      description: 'Conhecido como o ritmo "confortavelmente desconfortável". É a velocidade máxima em que o corpo consegue remover o lactato no mesmo ritmo em que ele é produzido.',
-      whenToUse: 'Treinos de Tempo Run (20 a 40 min contínuos) ou repetições longas com pouco descanso (ex: 5x 1km T com 1min de pausa).',
-      tip: 'Requer alta concentração. Consegue falar apenas palavras soltas.'
+      name: 'Zona T — Threshold / Limiar de Lactato',
+      pctVdot: '86% a 90% do VO2max / 88% a 92% FCmax',
+      color: '#EAB308',
+      objective: 'Elevação do limiar anaeróbio. Aumenta a velocidade em que seu organismo consegue depurar o lactato sem acidose muscular.',
+      whenToUse: 'Treinos contínuos de 20 a 40 minutos (Tempo Run) ou Cruise Intervals (ex: 4x 1.500m com 1min de trote leve).',
+      tip: 'A sensação é de esforço "confortavelmente duro". Se você começar a queimar precocemente, você está rápido demais.'
     },
     I: {
-      title: 'Zona I — Tiro de VO2máx (Interval Pace)',
-      badge: '97% - 100% VDOT',
-      color: 'border-vdot-orange/40 bg-vdot-orange/10 text-vdot-orange',
-      description: 'Treino de consumo máximo de oxigênio (VO2máx). Expande a capacidade do sistema cardiovascular e a potência aeróbica.',
-      whenToUse: 'Tiros de 400m a 1200m com tempo de descanso equivalente a 80-100% do tempo de tiro.',
-      tip: 'Esforço de prova de 3k a 5k. Muito exigente fisicamente e mentalmente.'
+      name: 'Zona I — Interval / VO2 Máximo',
+      pctVdot: '95% a 100% do VO2max / 93% a 98% FCmax',
+      color: '#EF4444',
+      objective: 'Desenvolvimento do teto de potência aeróbica máxima (VO2Max) e expansão do volume sistólico cardíaco.',
+      whenToUse: 'Tiros de 3 a 5 minutos (ex: 800m a 1.200m) com intervalo ativo de trote leve igual ou levemente menor ao tempo de estímulo (1:1).',
+      tip: 'Nunca ultrapasse o teto de 8% do volume semanal total do atleta em estímulos de ritmo I e R para evitar lesões!'
     },
     R: {
-      title: 'Zona R — Repetição e Velocidade Pura (Repetition Pace)',
-      badge: '> 100% VDOT',
-      color: 'border-purple-500/40 bg-purple-500/10 text-purple-400',
-      description: 'Foco na economia de corrida, mecânica da passada, recrutamento neuromuscular e velocidade anaeróbica.',
-      whenToUse: 'Tiros curtos (200m a 400m) com descanso total entre cada tiro para manter a técnica perfeita.',
-      tip: 'Não é um tiro descontrolado ("sprint total"), mas sim velocidade com postura e fluidez perfeitas.'
+      name: 'Zona R — Repetition / Economia & Velocidade',
+      pctVdot: '105% a 112% do VO2max / Supra-aeróbico',
+      color: '#A855F7',
+      objective: 'Aprimoramento da biomecânica, recrutamento de fibras de contração rápida, alta cadência e economia de corrida.',
+      whenToUse: 'Tiros curtos de 200m a 400m ou acelerações em retas (strides) com recuperação completa (2x a 3x o tempo de tiro).',
+      tip: 'O foco é fluidez, relaxamento dos ombros e mecânica impecável, não fadiga extrema ou acúmulo de ácido lático.'
     }
   };
 
   const faqs = [
     {
-      q: 'O que a ferramenta precisa exatamente para funcionar e gerar meus dados corretos?',
-      a: 'A ferramenta exige 3 dados fundamentais: 1) Um tempo recente de prova/treino (distância e tempo em 5k, 10k, 21k ou 42k) ou seu VDOT direto; 2) Sua Frequência Cardíaca Máxima (FCM) e em Repouso (FCR); 3) Seu volume semanal atual e dias disponíveis para treinar. Você insere tudo no botão "Ficha do Atleta".'
+      q: 'O que é VDOT e por que ele é mais preciso que apenas o VO2Max?',
+      a: 'O VDOT é um índice patenteado pelo lendário fisiologista Dr. Jack Daniels que combina o consumo máximo de oxigênio (VO2Max) com a Economia de Corrida do atleta. Dois corredores com o mesmo VO2Max podem ter desempenhos muito diferentes se um deles gastar menos energia mecânica. O VDOT expressa a sua real velocidade competitiva.'
     },
     {
-      q: 'O que é o VDOT e como ele é calculado?',
-      a: 'O VDOT é uma pontuação desenvolvida pelo lendário treinador Dr. Jack Daniels. Ele pega seu melhor tempo recente em prova e converte em um índice que reflete sua capacidade aeróbica real e economia de corrida, permitindo prescrever ritmos de treino sob medida.'
+      q: 'Qual é a regra sagrada do teto de 8% para treinos de tiro (I e R)?',
+      a: 'Na metodologia Jack Daniels, o volume total somado de tiros de alta intensidade (ritmos I e R) na semana NUNCA deve ultrapassar 8% da quilometragem total semanal. Por exemplo, para quem corre 40 km/semana, o teto é 3,2 km de tiro forte. Ultrapassar isso multiplica exponencialmente o risco de fraturas por estresse e fadiga crônica.'
     },
     {
-      q: 'Como interpretar as Zonas de Pace na aba de Calculadora?',
-      a: 'Cada zona (E, M, T, I, R) representa uma intensidade fisiológica específica. Nunca corra seus treinos leves (E) no ritmo de limiar (T). Respeitar os ritmos indicados evita lesões e garante supercompensação nos treinos de tiros.'
+      q: 'Como funciona a fórmula de frequência cardíaca de Karvonen?',
+      a: 'A fórmula de Karvonen utiliza a Frequência Cardíaca de Reserva (FCR = FCmax - FCrepouso): FC Alvo = FCrepouso + (% Intensidade × FCR). Ela é muito superior à fórmula clássica percentual porque leva em conta o nível de condicionamento do atleta refletido no seu coração em repouso.'
     },
     {
-      q: 'Com que frequência devo atualizar meus dados ou meu VDOT?',
-      a: 'Atualize seu VDOT sempre que fizer um novo teste de campo ou correr uma prova oficial com tempo melhor. Caso esteja voltando de lesão ou de uma pausa, ajuste o VDOT levemente para baixo na Ficha do Atleta.'
+      q: 'Com que frequência devo atualizar o meu VDOT no PaceLab?',
+      a: 'Recomenda-se atualizar o VDOT a cada 4 a 6 semanas, após a realização de uma prova oficial, teste de 5k/10k ou Teste de Cooper de 12 minutos. Nunca treine com base no VDOT que você "deseja ter", sempre treine com base no seu VDOT real demonstrado hoje.'
     },
     {
-      q: 'Como funciona a Frequência Cardíaca de Karvonen?',
-      a: 'Diferente da frequência simples, a Fórmula de Karvonen leva em conta sua Frequência Cardíaca de Reserva (FCM - FCR). Isso personaliza suas zonas Z1 a Z5 com precisão muito maior, considerando o nível do seu condicionamento físico.'
+      q: 'Como a aplicação ajusta meus treinos se eu registrar alguma dor?',
+      a: 'Na aba "Recuperação Ativa", ao registrar uma dor moderada ou severa (canelite, joelho, tendão de aquiles), o PaceLab automaticamente rebaixa o Readiness Score, gera alertas de segurança, reduz o volume sugerido e desabilita prescrição de tiros até a regressão dos sintomas.'
     },
     {
-      q: 'Como usar a Planilha de 8 Semanas de forma eficiente?',
-      a: 'A planilha gera treinos específicos divididos em dias da semana. Respeite os dias de descanso (OFF). Os ritmos indicados na planilha derivam exatamente do seu VDOT atual.'
+      q: 'Posso exportar minha planilha de 8 semanas para imprimir ou para o relógio?',
+      a: 'Sim! Na aba "Planilha 8 Semanas", você pode clicar no botão "Exportar Planilha (CSV / Impressão)" para ter uma visão tabular completa de todos os 56 dias de treinamento com todas as descrições, paces e zonas.'
     }
   ];
 
   return (
     <div className="space-y-8 animate-fadeIn">
-
-      {/* Header Banner do Guia */}
-      <div className="bg-gradient-to-r from-[#0A0A0A] via-[#121212] to-[#0A0A0A] border border-white/10 rounded-2xl p-6 md:p-8 relative overflow-hidden shadow-2xl">
+      {/* Banner Hero */}
+      <div 
+        id="guide-hero-banner"
+        className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#0D0907] via-[#0A0A0A] to-[#120E0B] border border-[#FF4E00]/25 p-6 sm:p-8 shadow-2xl shadow-black"
+      >
         <div className="absolute top-0 right-0 w-96 h-96 bg-[#FF4E00]/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
-        
-        <div className="max-w-3xl space-y-3 relative z-10">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#FF4E00]/15 border border-[#FF4E00]/30 text-[#FF4E00] text-xs font-mono font-bold uppercase tracking-wider">
-            <BookOpen className="w-3.5 h-3.5" />
-            <span>Manual do Atleta & Guia Interativo</span>
+        <div className="relative z-10 max-w-3xl space-y-4">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#FF4E00]/10 border border-[#FF4E00]/30 text-[#FF4E00] text-xs font-semibold uppercase tracking-wider">
+            <Flame className="w-3.5 h-3.5" />
+            Metodologia Científica Jack Daniels & Karvonen
           </div>
-          <h2 className="text-2xl md:text-3xl font-black text-white font-display tracking-tight uppercase italic">
-            Como usar o PaceLab VDOT e Dominar seus Treinos
+          <h2 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight leading-tight">
+            Como dominar seus treinos com o <span className="text-[#FF4E00]">PaceLab VDOT v3.5</span>
           </h2>
-          <p className="text-sm text-zinc-300 leading-relaxed font-sans">
-            Aprenda passo a passo o que a plataforma precisa para calibrar suas métricas, como interpretar as faixas de ritmo de Jack Daniels e tire o máximo proveito da sua planilha de treinos.
+          <p className="text-slate-300 text-sm sm:text-base leading-relaxed">
+            Elimine as adivinhações do seu treinamento de corrida. Nossa plataforma calcula com precisão matemática suas zonas de ritmo (Paces E, M, T, I, R), periodização de 8 semanas, análise de dores e prevenção de lesões.
           </p>
+
+          <div className="pt-2 flex flex-wrap items-center gap-3">
+            <button
+              id="btn-guide-open-athlete-modal"
+              onClick={onOpenAthleteModal}
+              className="px-5 py-2.5 rounded-xl bg-[#FF4E00] hover:bg-[#E03E00] text-white font-bold text-sm flex items-center gap-2 shadow-lg shadow-[#FF4E00]/25 transition-all transform hover:-translate-y-0.5"
+            >
+              <UserCheck className="w-4 h-4" />
+              Preencher Minha Ficha do Atleta
+            </button>
+            <button
+              id="btn-guide-goto-zones"
+              onClick={() => onNavigateTab('zonas')}
+              className="px-5 py-2.5 rounded-xl bg-[#121214] hover:bg-[#1A1A1D] border border-white/10 hover:border-[#FF4E00]/40 text-slate-200 font-semibold text-sm flex items-center gap-2 transition-all"
+            >
+              <Gauge className="w-4 h-4 text-[#FF4E00]" />
+              Ver Zonas de Pace
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* SEÇÃO 1: O QUE A FERRAMENTA PEDE PARA FUNCIONAR (CHECKLIST EM 3 PASSOS) */}
+      {/* Checklist em 3 Passos */}
       <div className="space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-[#FF4E00] text-black font-black flex items-center justify-center font-mono">1</div>
-          <h3 className="text-lg font-bold text-white uppercase tracking-wider font-display flex items-center gap-2">
-            <Sliders className="w-5 h-5 text-[#FF4E00]" />
-            O que a ferramenta pede para funcionar corretamente
+        <div className="flex items-center gap-2">
+          <CheckCircle2 className="w-5 h-5 text-[#FF4E00]" />
+          <h3 className="text-lg font-bold text-white uppercase tracking-wider font-heading">
+            Guia Rápido de Configuração em 3 Passos
           </h3>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          
-          {/* Passo 1 */}
-          <div className="bg-[#0A0A0A] border border-white/10 rounded-2xl p-5 hover:border-[#FF4E00]/40 transition space-y-3 flex flex-col justify-between">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-mono font-bold text-[#FF4E00] bg-[#FF4E00]/10 px-2.5 py-1 rounded-lg border border-[#FF4E00]/20">PASSO 01</span>
-                <UserCheck className="w-5 h-5 text-zinc-400" />
-              </div>
-              <h4 className="font-bold text-white text-base">Perfil Fisiológico & Saúde</h4>
-              <p className="text-xs text-zinc-400 leading-relaxed">
-                Insira sua <strong className="text-zinc-200">Idade, Sexo Biológico, Peso</strong> e dados cardíacos: <strong className="text-zinc-200">Frequência Cardíaca Máxima (FCM)</strong> e <strong className="text-zinc-200">Frequência Cardíaca em Repouso (FCR)</strong>.
-              </p>
-            </div>
-            <div className="text-[11px] text-zinc-500 bg-white/5 p-2.5 rounded-xl border border-white/5 font-mono">
-              💡 Usado no cálculo de Zonas Cardíacas de Karvonen (Z1 a Z5).
-            </div>
-          </div>
-
-          {/* Passo 2 */}
-          <div className="bg-[#0A0A0A] border border-white/10 rounded-2xl p-5 hover:border-[#FF4E00]/40 transition space-y-3 flex flex-col justify-between">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-mono font-bold text-[#FF4E00] bg-[#FF4E00]/10 px-2.5 py-1 rounded-lg border border-[#FF4E00]/20">PASSO 02</span>
-                <Award className="w-5 h-5 text-zinc-400" />
-              </div>
-              <h4 className="font-bold text-white text-base">Tempo Recente de Prova / VDOT</h4>
-              <p className="text-xs text-zinc-400 leading-relaxed">
-                Forneça seu melhor tempo recente em <strong className="text-zinc-200">5k, 10k, 21k ou 42k</strong> (ou ajuste seu valor de VDOT diretamente).
-              </p>
-            </div>
-            <div className="text-[11px] text-zinc-500 bg-white/5 p-2.5 rounded-xl border border-white/5 font-mono">
-              💡 Define seus paces exatos de treino (Easy, Tempo, Intervalos).
-            </div>
-          </div>
-
-          {/* Passo 3 */}
-          <div className="bg-[#0A0A0A] border border-white/10 rounded-2xl p-5 hover:border-[#FF4E00]/40 transition space-y-3 flex flex-col justify-between">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-mono font-bold text-[#FF4E00] bg-[#FF4E00]/10 px-2.5 py-1 rounded-lg border border-[#FF4E00]/20">PASSO 03</span>
-                <Calendar className="w-5 h-5 text-zinc-400" />
-              </div>
-              <h4 className="font-bold text-white text-base">Rotina & Volume Semanal</h4>
-              <p className="text-xs text-zinc-400 leading-relaxed">
-                Informe quantos <strong className="text-zinc-200">quilômetros você corre por semana (km/s)</strong>, seus <strong className="text-zinc-200">dias de treino disponíveis</strong> e seu <strong className="text-zinc-200">nível de experiência</strong>.
-              </p>
-            </div>
-            <div className="text-[11px] text-zinc-500 bg-white/5 p-2.5 rounded-xl border border-white/5 font-mono">
-              💡 Gera sua planilha de 8 semanas totalmente personalizada.
-            </div>
-          </div>
-
-        </div>
-
-        {/* Action CTA Box */}
-        <div className="bg-[#0A0A0A] border border-[#FF4E00]/30 rounded-2xl p-4 md:p-5 flex flex-col sm:flex-row items-center justify-between gap-4 bg-gradient-to-r from-[#FF4E00]/10 via-[#0A0A0A] to-[#0A0A0A]">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#FF4E00] text-black flex items-center justify-center shrink-0">
-              <Sparkles className="w-5 h-5" />
-            </div>
-            <div>
-              <h4 className="text-sm font-bold text-white">Pronto para configurar seu perfil?</h4>
-              <p className="text-xs text-zinc-400">Preencha sua Ficha do Atleta agora para ativar todos os cálculos da plataforma.</p>
-            </div>
-          </div>
-          <button
-            onClick={onOpenProfileModal}
-            className="w-full sm:w-auto px-5 py-2.5 bg-[#FF4E00] hover:bg-amber-500 text-black font-extrabold text-xs rounded-xl shadow-[0_0_15px_rgba(255,78,0,0.4)] transition uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shrink-0"
+          <div 
+            id="step-card-1"
+            className="telemetry-card p-5 space-y-3 relative group border border-white/10 hover:border-[#FF4E00]/40 transition-all cursor-pointer"
+            onClick={onOpenAthleteModal}
           >
-            <span>Abrir Ficha do Atleta</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
+            <div className="w-9 h-9 rounded-lg bg-[#FF4E00]/10 border border-[#FF4E00]/30 flex items-center justify-center text-[#FF4E00] font-bold text-base font-mono-data">
+              01
+            </div>
+            <h4 className="text-white font-bold text-base group-hover:text-[#FF4E00] transition-colors">
+              Configure seu Perfil Fisiológico
+            </h4>
+            <p className="text-slate-400 text-xs leading-relaxed">
+              Abra a <strong>Ficha do Atleta</strong> para definir sua FC Máxima, FC de Repouso (para o cálculo preciso de Karvonen) e seu nível de treino.
+            </p>
+            <div className="pt-2 flex items-center gap-1.5 text-xs text-[#FF4E00] font-semibold">
+              <span>Abrir Ficha</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </div>
+          </div>
+
+          <div 
+            id="step-card-2"
+            className="telemetry-card p-5 space-y-3 relative group border border-white/10 hover:border-[#FF4E00]/40 transition-all cursor-pointer"
+            onClick={() => onNavigateTab('zonas')}
+          >
+            <div className="w-9 h-9 rounded-lg bg-[#FF4E00]/10 border border-[#FF4E00]/30 flex items-center justify-center text-[#FF4E00] font-bold text-base font-mono-data">
+              02
+            </div>
+            <h4 className="text-white font-bold text-base group-hover:text-[#FF4E00] transition-colors">
+              Descubra seu VDOT Atual
+            </h4>
+            <p className="text-slate-400 text-xs leading-relaxed">
+              Insira um tempo recente de prova (5k, 10k, 21k) ou execute o <strong>Teste de Cooper (12 min)</strong> ou <strong>2.400m</strong> para fixar seus ritmos reais.
+            </p>
+            <div className="pt-2 flex items-center gap-1.5 text-xs text-[#FF4E00] font-semibold">
+              <span>Calcular VDOT</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </div>
+          </div>
+
+          <div 
+            id="step-card-3"
+            className="telemetry-card p-5 space-y-3 relative group border border-white/10 hover:border-[#FF4E00]/40 transition-all cursor-pointer"
+            onClick={() => onNavigateTab('planilha')}
+          >
+            <div className="w-9 h-9 rounded-lg bg-[#FF4E00]/10 border border-[#FF4E00]/30 flex items-center justify-center text-[#FF4E00] font-bold text-base font-mono-data">
+              03
+            </div>
+            <h4 className="text-white font-bold text-base group-hover:text-[#FF4E00] transition-colors">
+              Siga a Planilha de 8 Semanas
+            </h4>
+            <p className="text-slate-400 text-xs leading-relaxed">
+              Acesse sua periodização de 8 semanas com validação do teto de tiros (≤ 8%), manuais de pliometria progressiva e check-in diário de treinos.
+            </p>
+            <div className="pt-2 flex items-center gap-1.5 text-xs text-[#FF4E00] font-semibold">
+              <span>Acessar Planilha</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* SEÇÃO 2: COMO INTERPRETAR AS ZONAS DE PACE (INTERATIVO) */}
-      <div className="space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-[#FF4E00] text-black font-black flex items-center justify-center font-mono">2</div>
+      {/* Interpretador Interativo de Zonas Jack Daniels */}
+      <div className="telemetry-card p-6 space-y-6 border border-white/10">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <h3 className="text-lg font-bold text-white uppercase tracking-wider font-display flex items-center gap-2">
-              <Activity className="w-5 h-5 text-[#FF4E00]" />
-              Como Interpretar as Zonas de Pace de Jack Daniels
+            <div className="flex items-center gap-2 text-[#FF4E00] text-xs font-bold uppercase tracking-wider">
+              <BookOpen className="w-4 h-4" />
+              Fisiologia Aplicada
+            </div>
+            <h3 className="text-xl font-bold text-white mt-1">
+              Interpretador Interativo das Zonas Jack Daniels
             </h3>
-            <p className="text-xs text-zinc-400">Clique nas zonas abaixo para entender o objetivo fisiológico de cada intensidade.</p>
+            <p className="text-slate-400 text-xs">
+              Clique em cada zona para entender seu propósito fisiológico, intensidade e como executar.
+            </p>
+          </div>
+
+          {/* Buttons E, M, T, I, R */}
+          <div className="flex items-center gap-1.5 bg-[#121214] p-1.5 rounded-xl border border-white/10">
+            {(['E', 'M', 'T', 'I', 'R'] as const).map((zoneKey) => (
+              <button
+                key={zoneKey}
+                id={`btn-zone-selector-${zoneKey}`}
+                onClick={() => setSelectedZone(zoneKey)}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold font-mono-data transition-all ${
+                  selectedZone === zoneKey
+                    ? 'bg-[#FF4E00] text-white shadow-md shadow-[#FF4E00]/30'
+                    : 'text-slate-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                Pace {zoneKey}
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Tab Buttons for Zones */}
-        <div className="bg-[#0A0A0A] border border-white/10 rounded-2xl p-2 flex flex-wrap gap-2">
-          {(['E', 'M', 'T', 'I', 'R'] as const).map((zoneKey) => {
-            const isSelected = selectedPaceZone === zoneKey;
+        {/* Selected Zone Card */}
+        <div 
+          id="zone-detail-panel"
+          className="bg-[#121214] rounded-xl p-5 border border-white/10 space-y-4"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
+            <div className="flex items-center gap-3">
+              <div 
+                className="w-4 h-4 rounded-full shadow-lg"
+                style={{ backgroundColor: zonesGuide[selectedZone].color }}
+              />
+              <h4 className="text-base sm:text-lg font-bold text-white">
+                {zonesGuide[selectedZone].name}
+              </h4>
+            </div>
+            <span className="text-xs font-mono-data px-2.5 py-1 rounded bg-white/5 text-[#FF4E00] border border-white/10 font-bold">
+              {zonesGuide[selectedZone].pctVdot}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
+            <div className="space-y-1.5">
+              <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                🎯 Objetivo Fisiológico
+              </div>
+              <p className="text-xs text-slate-200 leading-relaxed">
+                {zonesGuide[selectedZone].objective}
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                ⏱️ Quando Utilizar
+              </div>
+              <p className="text-xs text-slate-200 leading-relaxed">
+                {zonesGuide[selectedZone].whenToUse}
+              </p>
+            </div>
+
+            <div className="space-y-1.5 bg-[#0A0A0A] p-3 rounded-lg border border-[#FF4E00]/20">
+              <div className="text-xs font-bold text-[#FF4E00] uppercase tracking-wider flex items-center gap-1">
+                <Flame className="w-3.5 h-3.5" />
+                Dica de Ouro do Treinador
+              </div>
+              <p className="text-xs text-slate-300 leading-relaxed italic">
+                "{zonesGuide[selectedZone].tip}"
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Guia de Funcionalidades Rápidas */}
+      <div className="space-y-4">
+        <h3 className="text-lg font-bold text-white uppercase tracking-wider font-heading flex items-center gap-2">
+          <Award className="w-5 h-5 text-[#FF4E00]" />
+          Módulos Integrados do PaceLab v3.5
+        </h3>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div 
+            id="feature-card-watch"
+            onClick={() => onNavigateTab('importer')}
+            className="telemetry-card p-4 space-y-2.5 border border-white/10 hover:border-[#FF4E00]/40 transition-all cursor-pointer group"
+          >
+            <div className="w-8 h-8 rounded-lg bg-[#FF4E00]/10 flex items-center justify-center text-[#FF4E00]">
+              <Watch className="w-4 h-4" />
+            </div>
+            <h4 className="text-sm font-bold text-white group-hover:text-[#FF4E00] transition-colors">
+              Importador GPX / TCX
+            </h4>
+            <p className="text-slate-400 text-xs">
+              Suba arquivos do seu Garmin, Strava ou Amazfit (Zepp) e extraia o VDOT da atividade automaticamente.
+            </p>
+          </div>
+
+          <div 
+            id="feature-card-predictions"
+            onClick={() => onNavigateTab('previsoes')}
+            className="telemetry-card p-4 space-y-2.5 border border-white/10 hover:border-[#FF4E00]/40 transition-all cursor-pointer group"
+          >
+            <div className="w-8 h-8 rounded-lg bg-[#FF4E00]/10 flex items-center justify-center text-[#FF4E00]">
+              <Gauge className="w-4 h-4" />
+            </div>
+            <h4 className="text-sm font-bold text-white group-hover:text-[#FF4E00] transition-colors">
+              Previsões de Prova & Pacing
+            </h4>
+            <p className="text-slate-400 text-xs">
+              Simulador com slider dinâmico de VDOT, parciais km a km, estratégia de Negative Split e Pace Band.
+            </p>
+          </div>
+
+          <div 
+            id="feature-card-recovery"
+            onClick={() => onNavigateTab('recuperacao')}
+            className="telemetry-card p-4 space-y-2.5 border border-white/10 hover:border-[#FF4E00]/40 transition-all cursor-pointer group"
+          >
+            <div className="w-8 h-8 rounded-lg bg-[#FF4E00]/10 flex items-center justify-center text-[#FF4E00]">
+              <HeartPulse className="w-4 h-4" />
+            </div>
+            <h4 className="text-sm font-bold text-white group-hover:text-[#FF4E00] transition-colors">
+              Recuperação & Pain Tracker
+            </h4>
+            <p className="text-slate-400 text-xs">
+              Mapeamento de dores anatômicas, score de prontidão, triagem de overtraining e calculadora de suor.
+            </p>
+          </div>
+
+          <div 
+            id="feature-card-races"
+            onClick={() => onNavigateTab('corridas')}
+            className="telemetry-card p-4 space-y-2.5 border border-white/10 hover:border-[#FF4E00]/40 transition-all cursor-pointer group"
+          >
+            <div className="w-8 h-8 rounded-lg bg-[#FF4E00]/10 flex items-center justify-center text-[#FF4E00]">
+              <MapPin className="w-4 h-4" />
+            </div>
+            <h4 className="text-sm font-bold text-white group-hover:text-[#FF4E00] transition-colors">
+              Corridas no Brasil
+            </h4>
+            <p className="text-slate-400 text-xs">
+              Banco com todas as 27 capitais, altimetria, compensação de VDOT e hub inteligente de scraping.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* FAQ Accordion */}
+      <div className="telemetry-card p-6 space-y-4 border border-white/10">
+        <div className="flex items-center gap-2">
+          <HelpCircle className="w-5 h-5 text-[#FF4E00]" />
+          <h3 className="text-lg font-bold text-white uppercase tracking-wider font-heading">
+            Perguntas Frequentes & Fundamentos Fisiológicos
+          </h3>
+        </div>
+
+        <div className="divide-y divide-white/10">
+          {faqs.map((faq, idx) => {
+            const isOpen = openFaqIndex === idx;
             return (
-              <button
-                key={zoneKey}
-                onClick={() => setSelectedPaceZone(zoneKey)}
-                className={`flex-1 min-w-[70px] py-2.5 px-3 rounded-xl font-bold font-mono text-xs transition cursor-pointer flex items-center justify-center gap-1.5 ${
-                  isSelected 
-                    ? 'bg-[#FF4E00] text-black shadow-[0_0_15px_rgba(255,78,0,0.3)]' 
-                    : 'bg-white/5 text-zinc-400 hover:text-white hover:bg-white/10'
-                }`}
-              >
-                <span>Zona {zoneKey}</span>
-              </button>
+              <div key={idx} className="py-3.5">
+                <button
+                  id={`btn-faq-toggle-${idx}`}
+                  onClick={() => setOpenFaqIndex(isOpen ? null : idx)}
+                  className="w-full flex items-center justify-between text-left gap-3 focus:outline-none"
+                >
+                  <span className="text-sm font-semibold text-slate-200 hover:text-[#FF4E00] transition-colors">
+                    {faq.q}
+                  </span>
+                  <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isOpen ? 'rotate-180 text-[#FF4E00]' : ''}`} />
+                </button>
+                <AnimatePresence>
+                  {isOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
+                    >
+                      <p className="pt-2.5 text-xs sm:text-sm text-slate-400 leading-relaxed">
+                        {faq.a}
+                      </p>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             );
           })}
         </div>
-
-        {/* Active Zone Detail Card */}
-        {selectedPaceZone && (
-          <div className={`bg-[#0A0A0A] border rounded-2xl p-6 space-y-4 transition-all duration-300 ${paceZoneInfo[selectedPaceZone].color}`}>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-4">
-              <h4 className="text-lg font-black text-white font-display">
-                {paceZoneInfo[selectedPaceZone].title}
-              </h4>
-              <span className="text-xs font-mono font-extrabold px-3 py-1 rounded-full bg-white/10 border border-white/10 w-fit">
-                {paceZoneInfo[selectedPaceZone].badge}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-zinc-300">
-              <div className="space-y-1.5">
-                <span className="font-bold text-white uppercase tracking-wider text-[10px] text-zinc-400 font-mono">Objetivo Fisiológico:</span>
-                <p className="leading-relaxed">{paceZoneInfo[selectedPaceZone].description}</p>
-              </div>
-              <div className="space-y-1.5">
-                <span className="font-bold text-white uppercase tracking-wider text-[10px] text-zinc-400 font-mono">Quando Utilizar:</span>
-                <p className="leading-relaxed">{paceZoneInfo[selectedPaceZone].whenToUse}</p>
-              </div>
-            </div>
-
-            <div className="bg-black/40 p-3.5 rounded-xl border border-white/5 flex items-start gap-2.5 text-xs text-amber-200/90 font-sans">
-              <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-              <div>
-                <strong className="text-amber-400">Dica Prática de Campo:</strong> {paceZoneInfo[selectedPaceZone].tip}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
-
-      {/* SEÇÃO 3: NAVEGAÇÃO E RECURSOS DAS ABAS DA APLICAÇÃO */}
-      <div className="space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-[#FF4E00] text-black font-black flex items-center justify-center font-mono">3</div>
-          <h3 className="text-lg font-bold text-white uppercase tracking-wider font-display flex items-center gap-2">
-            <Compass className="w-5 h-5 text-[#FF4E00]" />
-            Guia de Funcionalidades das Abas
-          </h3>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          
-          {/* Aba 1 */}
-          <div 
-            onClick={() => onNavigateTab('calculator')}
-            className="bg-[#0A0A0A] border border-white/10 rounded-2xl p-5 hover:border-[#FF4E00]/50 transition cursor-pointer group space-y-2"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-white font-bold text-sm group-hover:text-[#FF4E00] transition">
-                <Compass className="w-4 h-4 text-[#FF4E00]" />
-                <span>Zonas de Pace & Testes</span>
-              </div>
-              <ArrowRight className="w-4 h-4 text-zinc-500 group-hover:text-[#FF4E00] group-hover:translate-x-1 transition" />
-            </div>
-            <p className="text-xs text-zinc-400 leading-relaxed">
-              Exibe seus ritmos exatos de treino por km e por 400m, além das zonas cardíacas Z1 a Z5 (Karvonen). Permite simular novos tempos de prova.
-            </p>
-          </div>
-
-          {/* Aba 2 */}
-          <div 
-            onClick={() => onNavigateTab('plan')}
-            className="bg-[#0A0A0A] border border-white/10 rounded-2xl p-5 hover:border-[#FF4E00]/50 transition cursor-pointer group space-y-2"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-white font-bold text-sm group-hover:text-[#FF4E00] transition">
-                <Calendar className="w-4 h-4 text-[#FF4E00]" />
-                <span>Planilha de 8 Semanas</span>
-              </div>
-              <ArrowRight className="w-4 h-4 text-zinc-500 group-hover:text-[#FF4E00] group-hover:translate-x-1 transition" />
-            </div>
-            <p className="text-xs text-zinc-400 leading-relaxed">
-              Gera a estrutura completa de treinos semanais com distribuição de volume, dias OFF, rodagens leves, fartleks e treinos de tiros calculados.
-            </p>
-          </div>
-
-          {/* Aba 3 */}
-          <div 
-            onClick={() => onNavigateTab('predictor')}
-            className="bg-[#0A0A0A] border border-white/10 rounded-2xl p-5 hover:border-[#FF4E00]/50 transition cursor-pointer group space-y-2"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-white font-bold text-sm group-hover:text-[#FF4E00] transition">
-                <TrendingUp className="w-4 h-4 text-[#FF4E00]" />
-                <span>Previsões de Prova</span>
-              </div>
-              <ArrowRight className="w-4 h-4 text-zinc-500 group-hover:text-[#FF4E00] group-hover:translate-x-1 transition" />
-            </div>
-            <p className="text-xs text-zinc-400 leading-relaxed">
-              Mostra estimativas realistas do seu tempo potencial para 1.5k, 3k, 5k, 10k, Meia Maratona (21k) e Maratona (42k) com base no seu VDOT atual.
-            </p>
-          </div>
-
-          {/* Aba 4 */}
-          <div 
-            onClick={() => onNavigateTab('recovery')}
-            className="bg-[#0A0A0A] border border-white/10 rounded-2xl p-5 hover:border-[#FF4E00]/50 transition cursor-pointer group space-y-2"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-white font-bold text-sm group-hover:text-[#FF4E00] transition">
-                <Heart className="w-4 h-4 text-[#FF4E00]" />
-                <span>Recuperação Ativa</span>
-              </div>
-              <ArrowRight className="w-4 h-4 text-zinc-500 group-hover:text-[#FF4E00] group-hover:translate-x-1 transition" />
-            </div>
-            <p className="text-xs text-zinc-400 leading-relaxed">
-              Orientações essenciais de sono, hidratação, nutrição pós-treino, liberação miofascial e prevenção de lesões para manter você correndo longe da dor.
-            </p>
-          </div>
-
-        </div>
-      </div>
-
-      {/* SEÇÃO 4: FAQ / PERGUNTAS FREQUENTES */}
-      <div className="space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-[#FF4E00] text-black font-black flex items-center justify-center font-mono">4</div>
-          <h3 className="text-lg font-bold text-white uppercase tracking-wider font-display flex items-center gap-2">
-            <HelpCircle className="w-5 h-5 text-[#FF4E00]" />
-            Perguntas Frequentes (FAQ)
-          </h3>
-        </div>
-
-        <div className="space-y-3">
-          {faqs.map((faq, idx) => (
-            <div 
-              key={idx}
-              className="bg-[#0A0A0A] border border-white/10 rounded-2xl overflow-hidden transition"
-            >
-              <button
-                onClick={() => toggleFaq(idx)}
-                className="w-full p-4 md:p-5 text-left flex items-center justify-between gap-4 font-bold text-sm text-white hover:text-[#FF4E00] transition cursor-pointer"
-              >
-                <span>{faq.q}</span>
-                {openFaq === idx ? (
-                  <ChevronUp className="w-4 h-4 text-[#FF4E00] shrink-0" />
-                ) : (
-                  <ChevronDown className="w-4 h-4 text-zinc-500 shrink-0" />
-                )}
-              </button>
-              
-              {openFaq === idx && (
-                <div className="px-4 pb-5 md:px-5 text-xs text-zinc-300 leading-relaxed border-t border-white/5 pt-3 bg-white/[0.02]">
-                  {faq.a}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-
     </div>
   );
-}
+};

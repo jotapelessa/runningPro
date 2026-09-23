@@ -1,303 +1,247 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ChatMessage, RunnerState, WeekPlan } from '../types';
-import { Send, User, Sparkles, MessageCircle, RefreshCw, AlertCircle, X } from 'lucide-react';
+import { 
+  MessageSquare, 
+  X, 
+  Send, 
+  Bot, 
+  Sparkles, 
+  RotateCcw, 
+  Flame, 
+  HeartHandshake, 
+  Activity,
+  AlertCircle
+} from 'lucide-react';
+import { ChatMessage, RunnerState } from '../types';
 
 interface CoachChatProps {
   runnerState: RunnerState;
-  activePlan: WeekPlan[];
-  onClose?: () => void;
 }
 
-export default function CoachChat({ runnerState, activePlan, onClose }: CoachChatProps) {
+export const CoachChat: React.FC<CoachChatProps> = ({ runnerState }) => {
+  const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
-      id: 'welcome',
+      id: 'welcome-msg',
       role: 'assistant',
-      text: `Bem-vindo(a) ao Treinador Virtual de Corrida! Para montar seu plano personalizado, vou fazer algumas perguntas. Você pode responder todas de uma vez se preferir, ou uma a uma.
-
-Vamos começar? Por favor, me informe qual o seu objetivo e qual é a sua **idade** e **sexo biológico** (masculino/feminino).`,
-      timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      text: `👋 Olá, **${runnerState.name}**! Eu sou seu **Treinador IA PaceLab VDOT**.\n\nEstou calibrado com seu VDOT atual de **${runnerState.currentVdot.toFixed(1)}** e volume de **${runnerState.weeklyVolume} km/sem**.\n\nComo posso ajudar você com suas zonas de ritmo, progressão de carga ou prevenção de lesões hoje?`,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     }
   ]);
+  const [inputText, setInputText] = useState('');
+  const [loading, setLoading] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const [inputText, setInputText] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(false);
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const quickChips = [
+    'Como distribuir meu volume semanal?',
+    'Qual meu teto seguro de tiros (≤ 8%)?',
+    'Estou sentindo dor na canela, o que fazer?',
+    'Como respirar durante o Pace T (Limiar)?',
+    'Estratégia de nutrição para 21k/42k'
+  ];
 
-  // Auto-scroll to bottom of chat
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, loading]);
+    if (isOpen) {
+      scrollToBottom();
+    }
+  }, [messages, isOpen]);
 
-  const handleSendMessage = async (textToSend: string) => {
-    if (!textToSend.trim() || loading) return;
+  const handleSendMessage = async (textToSend?: string) => {
+    const text = textToSend || inputText;
+    if (!text.trim() || loading) return;
 
-    const userMsg: ChatMessage = {
-      id: Date.now().toString(),
+    const userMessage: ChatMessage = {
+      id: `msg-${Date.now()}`,
       role: 'user',
-      text: textToSend,
-      timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      text: text.trim(),
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
 
-    setMessages(prev => [...prev, userMsg]);
+    const newHistory = [...messages, userMessage];
+    setMessages(newHistory);
     setInputText('');
     setLoading(true);
-
-    // Format current training plan details for the AI coach context
-    const currentPlanSummary = activePlan.map(w => 
-      `Semana ${w.weekNum} [${w.periodLabel}]: Volume ${w.totalVolumeKm}km. Intensidade: ${w.intensityLevel}.`
-    ).join('\n');
 
     try {
       const response = await fetch('/api/coach', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: [...messages, userMsg].map(m => ({ role: m.role, text: m.text })),
-          runnerState: runnerState,
-          currentPlanSummary: currentPlanSummary
-        })
+          messages: newHistory,
+          runnerState,
+          userPrompt: text.trim(),
+        }),
       });
 
       const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Erro desconhecido');
-      }
-      
-      const coachMsg: ChatMessage = {
-        id: (Date.now() + 1).toString(),
+      const botReply: ChatMessage = {
+        id: `bot-${Date.now()}`,
         role: 'assistant',
-        text: data.message || '⚠️ **Desculpe**, tive um problema ao processar sua resposta. Por favor, tente novamente.',
-        timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+        text: data.text || 'Entendido! Siga rigorosamente suas zonas de FC e pace.',
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
 
-      setMessages(prev => [...prev, coachMsg]);
-    } catch (err: any) {
-      console.error(err);
-      const errMsg: ChatMessage = {
-        id: 'error-' + Date.now(),
+      setMessages((prev) => [...prev, botReply]);
+    } catch (err) {
+      console.error('Coach chat error:', err);
+      const errorReply: ChatMessage = {
+        id: `bot-${Date.now()}`,
         role: 'assistant',
-        text: `⚠️ **Ops, ocorreu um erro!** ${err.message || 'Não consegui obter resposta do Treinador IA. Por favor, tente novamente mais tarde.'}`,
-        timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+        text: 'Desculpe, tive uma instabilidade temporária na conexão. Lembre-se: mantenha pelo menos 75% da sua semana em Z2 (Pace E) para recuperação garantida.',
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
-      setMessages(prev => [...prev, errMsg]);
+      setMessages((prev) => [...prev, errorReply]);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleQuickTrigger = (text: string) => {
-    handleSendMessage(text);
-  };
-
-  const handleResetChat = () => {
+  const handleReset = () => {
     setMessages([
       {
-        id: 'welcome',
+        id: `welcome-${Date.now()}`,
         role: 'assistant',
-        text: `Bem-vindo(a) ao Treinador Virtual de Corrida! Para montar seu plano personalizado, vou fazer algumas perguntas. Você pode responder todas de uma vez se preferir, ou uma a uma.
-
-Vamos começar? Por favor, me informe qual o seu objetivo e qual é a sua **idade** e **sexo biológico** (masculino/feminino).`,
-        timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+        text: `Conversa reiniciada. Fisiologia pronta: VDOT **${runnerState.currentVdot.toFixed(1)}**, ${runnerState.weeklyVolume} km semanais. Em que posso te orientar agora?`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       }
     ]);
   };
 
   return (
-    <div id="coach-chat-container" className="bg-slate-950 text-slate-100 rounded-2xl flex flex-col h-[640px] shadow-xl overflow-hidden border border-slate-800">
-      
-      {/* Chat Header */}
-      <div className="bg-slate-900 px-5 py-4 border-b border-slate-800 flex items-center justify-between shrink-0">
-        <div className="flex items-center space-x-3">
-          <div className="bg-vdot-orange/15 p-2 rounded-lg border border-vdot-orange/20 animate-pulse">
-            <Sparkles className="w-4 h-4 text-vdot-orange" />
-          </div>
-          <div>
-            <h3 className="font-extrabold text-sm text-white flex items-center gap-1.5">
-              Treinador IA VDOT
-              <span className="bg-[#FF4E00]/10 text-[#FF4E00] text-[8px] font-black tracking-normal px-1.5 py-0.5 rounded uppercase">Coach</span>
-            </h3>
-            <span className="text-[10px] text-emerald-400 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-ping" />
-              Sincronizado com os dados acima
-            </span>
-          </div>
-        </div>
-        
-        <div className="flex items-center space-x-1">
-          <button 
-            type="button"
-            onClick={handleResetChat}
-            title="Reiniciar chat"
-            className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition cursor-pointer"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
-          
-          {onClose && (
-            <button 
-              type="button"
-              onClick={onClose}
-              title="Fechar chat"
-              className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Messages Scroll Area */}
-      <div className="flex-1 p-5 overflow-y-auto space-y-4 scroll-smooth">
-        {messages.map(msg => {
-          const isUser = msg.role === 'user';
-          return (
-            <div 
-              key={msg.id}
-              className={`flex items-start gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}
-            >
-              {!isUser && (
-                <div className="bg-vdot-orange shrink-0 p-1.5 rounded-lg text-black font-black text-xs mt-0.5 shadow-[0_0_8px_rgba(255,78,0,0.3)]">
-                  IA
-                </div>
-              )}
-
-              <div className={`flex flex-col max-w-[85%] ${isUser ? 'items-end' : 'items-start'}`}>
-                <div className={`p-4 rounded-2xl text-sm leading-relaxed ${
-                  isUser 
-                    ? 'bg-vdot-orange text-black font-extrabold rounded-tr-none shadow-[0_0_12px_rgba(255,78,0,0.2)]' 
-                    : 'bg-[#121214] border border-white/5 text-slate-200 rounded-tl-none'
-                }`}>
-                  {renderCustomMarkdown(msg.text)}
-                </div>
-                <span className="text-[9px] text-slate-500 mt-1 font-mono">{msg.timestamp}</span>
-              </div>
-
-              {isUser && (
-                <div className="bg-slate-800 shrink-0 p-1.5 rounded-lg text-slate-400 mt-0.5">
-                  <User className="w-3.5 h-3.5" />
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-        {loading && (
-          <div className="flex items-start gap-3 justify-start">
-            <div className="bg-vdot-orange shrink-0 p-1.5 rounded-lg text-black font-black text-xs mt-0.5">
-              IA
-            </div>
-            <div className="bg-[#121214] border border-white/5 p-4 rounded-2xl text-sm text-slate-400 rounded-tl-none flex items-center space-x-2">
-              <span className="w-2 h-2 bg-slate-500 rounded-full animate-bounce delay-75" />
-              <span className="w-2 h-2 bg-slate-500 rounded-full animate-bounce delay-150" />
-              <span className="w-2 h-2 bg-slate-500 rounded-full animate-bounce delay-300" />
-              <span className="text-xs font-mono ml-2">Treinador elaborando planilha...</span>
-            </div>
-          </div>
-        )}
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Suggested Fast Triggers */}
-      <div className="px-4 py-2 bg-slate-900/40 border-t border-slate-900 overflow-x-auto whitespace-nowrap scrollbar-none flex gap-2 shrink-0">
-        <button 
-          onClick={() => handleQuickTrigger('Como deve ser a progressão de volume (km) e intensidade?')}
-          className="bg-slate-900 border border-slate-800 hover:border-vdot-orange px-3 py-1.5 rounded-lg text-xs text-slate-300 hover:text-white transition shrink-0 cursor-pointer"
-        >
-          📈 Volume vs Intensidade
-        </button>
-        <button 
-          onClick={() => handleQuickTrigger('Fiz o teste de Cooper e corri 2800 metros. Calcular meu VO2 e VDOT, por favor.')}
-          className="bg-slate-900 border border-slate-800 hover:border-vdot-orange px-3 py-1.5 rounded-lg text-xs text-slate-300 hover:text-white transition shrink-0 cursor-pointer"
-        >
-          🏃 Calcular Cooper 2800m
-        </button>
-        <button 
-          onClick={() => handleQuickTrigger('Se eu corro 5k em 22:30, quanto faço nos 10k e na meia maratona?')}
-          className="bg-slate-900 border border-slate-800 hover:border-vdot-orange px-3 py-1.5 rounded-lg text-xs text-slate-300 hover:text-white transition shrink-0 cursor-pointer"
-        >
-          ⏱️ Equivalência 5k (22min)
-        </button>
-        <button 
-          onClick={() => handleQuickTrigger('Sinto fortes dores na canela direita ao treinar, o que devo fazer?')}
-          className="bg-slate-900 border border-rose-850 hover:border-rose-500 px-3 py-1.5 rounded-lg text-xs text-rose-300 hover:text-white transition shrink-0 cursor-pointer"
-        >
-          🚨 Canela inflamada (Dor aguda!)
-        </button>
-        <button 
-          onClick={() => handleQuickTrigger('Estou exausto e me sentindo com sintomas de overtraining. Como recuperar?')}
-          className="bg-slate-900 border border-slate-800 hover:border-vdot-orange px-3 py-1.5 rounded-lg text-xs text-slate-300 hover:text-white transition shrink-0 cursor-pointer"
-        >
-          🔋 Fadiga & Overtraining
-        </button>
-      </div>
-
-      {/* Input Bar */}
-      <form 
-        onSubmit={(e) => {
-          e.preventDefault();
-          handleSendMessage(inputText);
-        }}
-        className="bg-slate-900 p-4 border-t border-slate-850 flex gap-2.5 shrink-0"
+    <>
+      {/* Floating Trigger Button */}
+      <button
+        id="btn-open-coach-chat"
+        onClick={() => setIsOpen(!isOpen)}
+        className="fixed bottom-5 right-5 z-40 p-3.5 rounded-full bg-[#FF4E00] hover:bg-[#E03E00] text-white shadow-2xl shadow-[#FF4E00]/40 flex items-center justify-center transition-transform hover:scale-105 active:scale-95 group"
+        title="Falar com o Treinador IA"
       >
-        <input 
-          type="text"
-          value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
-          placeholder="Escreva sua mensagem para o Treinador VDOT..."
-          disabled={loading}
-          className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-vdot-orange disabled:opacity-50"
-        />
-        <button 
-          type="submit"
-          disabled={!inputText.trim() || loading}
-          className="bg-vdot-orange hover:bg-opacity-90 text-black font-black px-4 py-3 rounded-xl transition disabled:opacity-50 shrink-0 cursor-pointer"
+        <Bot className="w-6 h-6" />
+        <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-[#050505]"></span>
+        </span>
+      </button>
+
+      {/* Floating Modal Panel */}
+      {isOpen && (
+        <div 
+          id="coach-chat-window"
+          className="fixed bottom-20 right-4 sm:right-6 z-50 w-[92vw] sm:w-[420px] h-[580px] max-h-[82vh] bg-[#0A0A0A] border border-[#FF4E00]/30 rounded-2xl shadow-2xl shadow-black flex flex-col overflow-hidden animate-fadeIn"
         >
-          <Send className="w-4 h-4" />
-        </button>
-      </form>
+          {/* Header */}
+          <div className="bg-gradient-to-r from-[#140F0C] via-[#0A0A0A] to-[#140F0C] border-b border-white/10 px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-[#FF4E00]/10 border border-[#FF4E00]/30 flex items-center justify-center text-[#FF4E00]">
+                <Bot className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <h4 className="text-xs sm:text-sm font-bold text-white font-heading">Treinador IA PaceLab</h4>
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                </div>
+                <div className="text-[10px] text-slate-400 font-mono-data">
+                  VDOT {runnerState.currentVdot.toFixed(1)} • Jack Daniels Fisiologia
+                </div>
+              </div>
+            </div>
 
-    </div>
+            <div className="flex items-center gap-1">
+              <button
+                id="btn-reset-coach-chat"
+                onClick={handleReset}
+                title="Reiniciar conversa"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+              <button
+                id="btn-close-coach-chat"
+                onClick={() => setIsOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Prompts Chips */}
+          <div className="bg-[#050505] px-3 py-2 border-b border-white/5 flex gap-1.5 overflow-x-auto no-scrollbar">
+            {quickChips.map((chip, idx) => (
+              <button
+                key={idx}
+                onClick={() => handleSendMessage(chip)}
+                className="whitespace-nowrap text-[10px] px-2.5 py-1 rounded-full bg-white/5 hover:bg-[#FF4E00]/15 hover:text-[#FF4E00] border border-white/10 text-slate-300 transition-colors flex-shrink-0"
+              >
+                {chip}
+              </button>
+            ))}
+          </div>
+
+          {/* Messages Scroll View */}
+          <div className="flex-1 p-4 overflow-y-auto space-y-3.5">
+            {messages.map((msg) => {
+              const isUser = msg.role === 'user';
+              return (
+                <div
+                  key={msg.id}
+                  className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}
+                >
+                  <div
+                    className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-xs sm:text-sm leading-relaxed ${
+                      isUser
+                        ? 'bg-[#FF4E00] text-white rounded-br-none shadow-md shadow-[#FF4E00]/20'
+                        : 'bg-[#121214] text-slate-200 border border-white/10 rounded-bl-none'
+                    }`}
+                  >
+                    <div className="whitespace-pre-wrap font-sans">{msg.text}</div>
+                  </div>
+                  <span className="text-[10px] text-slate-500 px-1 mt-1 font-mono-data">
+                    {msg.timestamp}
+                  </span>
+                </div>
+              );
+            })}
+
+            {loading && (
+              <div className="flex items-center gap-2 text-xs text-slate-400 bg-[#121214] px-3 py-2 rounded-xl w-fit border border-white/10">
+                <Sparkles className="w-3.5 h-3.5 text-[#FF4E00] animate-spin" />
+                <span>Analisando fisiologia e calculando resposta...</span>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Chat Input */}
+          <div className="p-3 bg-[#0A0A0A] border-t border-white/10">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSendMessage();
+              }}
+              className="flex items-center gap-2"
+            >
+              <input
+                type="text"
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                placeholder="Pergunte sobre treinos, dores, paces..."
+                className="flex-1 bg-[#121214] border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#FF4E00]"
+              />
+              <button
+                type="submit"
+                disabled={!inputText.trim() || loading}
+                className="p-2 rounded-xl bg-[#FF4E00] hover:bg-[#E03E00] disabled:opacity-40 text-white transition-all shadow-md shadow-[#FF4E00]/20"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+    </>
   );
-}
-
-// Inline Markdown parsing elements
-function renderCustomMarkdown(text: string = '') {
-  const safeText = typeof text === 'string' ? text : String(text || '');
-  return safeText.split('\n').map((line, i) => {
-    // List item check
-    if (line.trim().startsWith('- ')) {
-      return <li key={i} className="ml-4 list-disc text-slate-300 leading-relaxed mb-1">{parseInlineStyles(line.trim().substring(2))}</li>;
-    }
-    if (line.trim().startsWith('* ')) {
-      return <li key={i} className="ml-4 list-disc text-slate-300 leading-relaxed mb-1">{parseInlineStyles(line.trim().substring(2))}</li>;
-    }
-    // Heading 3
-    if (line.trim().startsWith('### ')) {
-      return <h4 key={i} className="text-sm font-extrabold text-white mt-3.5 mb-1 tracking-wide">{parseInlineStyles(line.trim().substring(4))}</h4>;
-    }
-    // Heading 2
-    if (line.trim().startsWith('## ')) {
-      return <h3 key={i} className="text-base font-black text-white mt-4 mb-2 tracking-wide border-b border-slate-800 pb-1">{parseInlineStyles(line.trim().substring(3))}</h3>;
-    }
-    // Standard Paragraph
-    if (line.trim() === '') return <div key={i} className="h-2" />;
-    return <p key={i} className="text-slate-300 leading-relaxed font-sans mb-1.5">{parseInlineStyles(line)}</p>;
-  });
-}
-
-function parseInlineStyles(line: string = '') {
-  const safeLine = typeof line === 'string' ? line : String(line || '');
-  const parts = safeLine.split(/\*\*([^*]+)\*\*/g);
-  return parts.map((part, i) => {
-    if (i % 2 === 1) {
-      return <strong key={i} className="font-extrabold text-white bg-slate-800/60 px-1 py-0.2 rounded">{part}</strong>;
-    }
-    return part;
-  });
-}
+};
