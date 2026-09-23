@@ -308,8 +308,8 @@ export function deduplicateOrMergeActivity(
     const existingTime = new Date(existing.date).getTime();
     const timeDiffMinutes = Math.abs(incomingTime - existingTime) / (1000 * 60);
 
-    // 1. Time proximity check (<= 20 minutes)
-    if (timeDiffMinutes > 20) return false;
+    // 1. Time proximity check (up to 4 hours to catch timezone offsets)
+    if (timeDiffMinutes > 240) return false;
 
     // 2. Type compatibility
     const sameType = existing.type === incoming.type || 
@@ -317,15 +317,21 @@ export function deduplicateOrMergeActivity(
       (existing.type === 'trail' && incoming.type === 'run');
     if (!sameType) return false;
 
-    // 3. Distance proximity check (within 8% or 300m)
     const distDiffKm = Math.abs(existing.distanceKm - incoming.distanceKm);
     const distDiffPct = distDiffKm / Math.max(existing.distanceKm, 0.1);
-    if (distDiffKm > 0.3 && distDiffPct > 0.08) return false;
-
-    // 4. Duration proximity check (within 10% or 180s)
+    
     const durDiffSec = Math.abs(existing.durationSeconds - incoming.durationSeconds);
     const durDiffPct = durDiffSec / Math.max(existing.durationSeconds, 1);
-    if (durDiffSec > 180 && durDiffPct > 0.1) return false;
+
+    if (timeDiffMinutes > 20) {
+      // If time diff is large (timezone bug likely), require STRICT distance and duration match
+      if (distDiffKm > 0.05 && distDiffPct > 0.02) return false;
+      if (durDiffSec > 60 && durDiffPct > 0.05) return false;
+    } else {
+      // Normal checks for activities recorded at the same time
+      if (distDiffKm > 0.3 && distDiffPct > 0.08) return false;
+      if (durDiffSec > 180 && durDiffPct > 0.1) return false;
+    }
 
     return true;
   });
