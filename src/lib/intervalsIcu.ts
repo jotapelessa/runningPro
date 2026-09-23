@@ -146,7 +146,7 @@ export function mapIntervalsToUserActivity(activity: IntervalsActivity): UserAct
     id: `intervals-${activity.id}`,
     title: activity.name || 'Treino Intervals.icu',
     type: activity.type.toLowerCase() === 'run' || activity.type.toLowerCase() === 'virtualrun' ? 'run' : 'other',
-    source: 'intervals.icu',
+    source: 'intervals',
     sourceLabel: 'Intervals.icu',
     date: activity.start_date_local,
     distanceMeters: activity.distance,

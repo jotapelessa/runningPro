@@ -35,71 +35,7 @@ export const WorkoutImporter: React.FC<WorkoutImporterProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Quick Demo Loaders
-  const loadDemoWorkout = (type: '5k' | '10k' | '21k') => {
-    setIsParsing(true);
-    setErrorMessage(null);
 
-    setTimeout(() => {
-      let demo: ParsedWorkout;
-      if (type === '5k') {
-        demo = {
-          name: 'Treino de Ritmo 5k (Amazfit)',
-          date: new Date().toISOString().split('T')[0],
-          fileName: 'amazfit_zepp_5k_tempo.tcx',
-          distanceKm: 5.0,
-          distanceMeters: 5000,
-          durationSeconds: 1245,
-          durationFormatted: '20:45',
-          paceSecondsPerKm: 249,
-          paceFormatted: '4:09',
-          avgHR: 168,
-          maxHR: 178,
-          avgCadence: 176,
-          elevationGainMeters: 35,
-          vdot: 49.2,
-        };
-      } else if (type === '10k') {
-        demo = {
-          name: 'Corrida Contínua 10k (Strava GPX)',
-          date: new Date().toISOString().split('T')[0],
-          fileName: 'strava_10k_progression.gpx',
-          distanceKm: 10.0,
-          distanceMeters: 10000,
-          durationSeconds: 2712,
-          durationFormatted: '45:12',
-          paceSecondsPerKm: 271,
-          paceFormatted: '4:31',
-          avgHR: 164,
-          maxHR: 174,
-          avgCadence: 172,
-          elevationGainMeters: 80,
-          vdot: 45.4,
-        };
-      } else {
-        demo = {
-          name: 'Longão de Meia Maratona (Garmin FIT)',
-          date: new Date().toISOString().split('T')[0],
-          fileName: 'garmin_long_run_21k.fit',
-          distanceKm: 21.1,
-          distanceMeters: 21100,
-          durationSeconds: 5910,
-          durationFormatted: '1:38:30',
-          paceSecondsPerKm: 280,
-          paceFormatted: '4:40',
-          avgHR: 158,
-          maxHR: 170,
-          avgCadence: 174,
-          elevationGainMeters: 140,
-          vdot: 46.8,
-        };
-      }
-
-      setParsedWorkouts([demo]);
-      setMultiSummary(aggregateWorkoutTelemetry([demo]));
-      setIsParsing(false);
-    }, 200);
-  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -283,44 +219,7 @@ export const WorkoutImporter: React.FC<WorkoutImporterProps> = ({
             </span>
           </div>
 
-          {/* Quick Demo Pre-loaded Workouts */}
-          <div className="bg-[#121214] p-4 rounded-xl border border-white/10 space-y-2.5">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-[#FF4E00]" />
-                Não tem um arquivo agora? Teste com telemetrias reais de exemplo:
-              </span>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <button
-                type="button"
-                id="btn-demo-5k"
-                onClick={() => loadDemoWorkout('5k')}
-                className="px-3 py-2 rounded-lg bg-white/5 hover:bg-[#FF4E00]/15 border border-white/10 hover:border-[#FF4E00]/40 text-left transition-all cursor-pointer"
-              >
-                <div className="text-[11px] font-bold text-white">5k Rápido (TCX)</div>
-                <div className="text-[10px] text-slate-400 font-mono-data">5.0km • 20:45 (4:09/km)</div>
-              </button>
-              <button
-                type="button"
-                id="btn-demo-10k"
-                onClick={() => loadDemoWorkout('10k')}
-                className="px-3 py-2 rounded-lg bg-white/5 hover:bg-[#FF4E00]/15 border border-white/10 hover:border-[#FF4E00]/40 text-left transition-all cursor-pointer"
-              >
-                <div className="text-[11px] font-bold text-white">10k Limiar (GPX)</div>
-                <div className="text-[10px] text-slate-400 font-mono-data">10.0km • 45:12 (4:31/km)</div>
-              </button>
-              <button
-                type="button"
-                id="btn-demo-21k"
-                onClick={() => loadDemoWorkout('21k')}
-                className="px-3 py-2 rounded-lg bg-white/5 hover:bg-[#FF4E00]/15 border border-white/10 hover:border-[#FF4E00]/40 text-left transition-all cursor-pointer"
-              >
-                <div className="text-[11px] font-bold text-white">Meia 21.1k (FIT)</div>
-                <div className="text-[10px] text-slate-400 font-mono-data">21.1km • 1:38:30 (4:40/km)</div>
-              </button>
-            </div>
-          </div>
+
 
           {/* Error Feedback */}
           {errorMessage && (

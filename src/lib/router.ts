@@ -34,7 +34,7 @@ export const ROUTE_TAB_MAP: Record<string, AppTab> = {
 /**
  * Obtém a aba correspondente ao pathname atual da janela
  */
-export function getTabFromPathname(): { tab: AppTab; openModal?: 'metronomo' | 'relogio' | 'atleta' } {
+export function getTabFromPathname(): { tab: AppTab; openModal?: 'metronomo' | 'pulseira' | 'calculadora' | 'atleta' } {
   if (typeof window === 'undefined') {
     return { tab: 'atividades' };
   }
@@ -43,6 +43,14 @@ export function getTabFromPathname(): { tab: AppTab; openModal?: 'metronomo' | '
 
   if (path === '/relogio' || path === '/metronomo') {
     return { tab: 'atividades', openModal: 'metronomo' };
+  }
+  
+  if (path === '/pulseira') {
+    return { tab: 'atividades', openModal: 'pulseira' };
+  }
+  
+  if (path === '/calculadora' || path === '/pace') {
+    return { tab: 'atividades', openModal: 'calculadora' };
   }
 
   if (path === '/atleta' || path === '/perfil') {
@@ -64,7 +72,11 @@ export function syncPathWithTab(tab: AppTab, modal?: string) {
   if (typeof window === 'undefined') return;
 
   let targetPath = TAB_ROUTE_MAP[tab] || '/atividades';
+  
   if (modal === 'metronomo') targetPath = '/relogio';
+  else if (modal === 'pulseira') targetPath = '/pulseira';
+  else if (modal === 'calculadora') targetPath = '/calculadora';
+  else if (modal === 'atleta') targetPath = '/perfil';
 
   const currentPath = window.location.pathname.replace(/\/$/, '') || '/';
   if (currentPath !== targetPath) {

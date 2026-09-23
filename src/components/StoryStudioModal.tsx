@@ -266,23 +266,7 @@ const DEFAULT_CONFIG: StoryConfig = {
   customTitle: ''
 };
 
-const SAMPLE_PHOTOS = [
-  {
-    name: 'Selfie Corrida',
-    url: 'https://images.unsplash.com/photo-1552674605-db6ffd4facb5?w=1080&q=80',
-    desc: 'Atleta comemorando percurso'
-  },
-  {
-    name: 'Prova & Medalha',
-    url: 'https://images.unsplash.com/photo-1452626038306-9aae5e071dd3?w=1080&q=80',
-    desc: 'Linha de chegada esportiva'
-  },
-  {
-    name: 'Trilha & Montanha',
-    url: 'https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?w=1080&q=80',
-    desc: 'Treino ao ar livre'
-  }
-];
+
 
 const COLOR_OPTIONS = [
   { label: 'Strava Laranja Clássico', value: '#FC4C02' },
@@ -415,11 +399,8 @@ export const StoryStudioModal: React.FC<StoryStudioModalProps> = ({
     const targetStored = updatedSettings[newTemplateId];
     const targetDefaults = TEMPLATE_DEFAULTS[newTemplateId] || TEMPLATE_DEFAULTS[0];
 
-    // If switching to templates 1, 2, 3 or 4 and there's no photo yet, auto-select a sample photo
+    // If switching to templates 1, 2, 3 or 4 and there's no photo yet, we just keep undefined
     let photoToUse = config.customPhotoUrl;
-    if (newTemplateId !== 0 && !photoToUse) {
-      photoToUse = SAMPLE_PHOTOS[0].url;
-    }
 
     const targetCourseData = newTemplateId === 1
       ? (targetStored?.courseData || config.courseData || getDefaultCourseDataConfig(activity, athleteName))
@@ -1213,8 +1194,7 @@ export const StoryStudioModal: React.FC<StoryStudioModalProps> = ({
                             // Default to first sample photo if none selected
                             setConfig(prev => ({
                               ...prev,
-                              backgroundType: 'photo',
-                              customPhotoUrl: SAMPLE_PHOTOS[0].url
+                              backgroundType: 'photo'
                             }));
                           } else {
                             setConfig(prev => ({ ...prev, backgroundType: 'photo' }));
@@ -1263,39 +1243,7 @@ export const StoryStudioModal: React.FC<StoryStudioModalProps> = ({
                         </button>
                       </div>
 
-                      {/* Sample Photos for Quick Try */}
-                      <div>
-                        <div className="text-[11px] text-slate-400 mb-1.5">Ou escolha uma foto de demonstração:</div>
-                        <div className="grid grid-cols-3 gap-2">
-                          {SAMPLE_PHOTOS.map(p => (
-                            <button
-                              key={p.name}
-                              onClick={() => {
-                                preloadStoryPhoto(p.url).then(() => {
-                                  setConfig(prev => ({
-                                    ...prev,
-                                    backgroundType: 'photo',
-                                    customPhotoUrl: p.url
-                                  }));
-                                });
-                              }}
-                              className={`p-1.5 rounded-lg border text-left transition-all flex flex-col items-center gap-1 overflow-hidden relative ${
-                                config.customPhotoUrl === p.url
-                                  ? 'border-orange-500 bg-orange-500/15 text-white ring-1 ring-orange-500'
-                                  : 'border-slate-800 bg-slate-800/30 text-slate-400 hover:text-white'
-                              }`}
-                            >
-                              <img 
-                                src={p.url} 
-                                alt={p.name}
-                                className="w-full h-12 object-cover rounded-md" 
-                                referrerPolicy="no-referrer"
-                              />
-                              <span className="text-[10px] font-semibold truncate w-full text-center">{p.name}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
+
                     </div>
                   )}
 

@@ -11,7 +11,10 @@ import {
   MapPin, 
   X,
   ChevronRight,
-  Sparkles
+  Sparkles,
+  Timer,
+  Volume2,
+  Award
 } from 'lucide-react';
 import { RunnerState, AppTab } from '../types';
 import { TAB_ROUTE_MAP } from '../lib/router';
@@ -35,6 +38,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   runnerState,
   isMobileOpen,
   onCloseMobile,
+  onOpenAthleteModal,
+  onOpenPaceModal,
+  onOpenMetronomeModal,
+  onOpenWristbandModal,
 }) => {
   const isTransitionUser = runnerState?.level === 'sedentary_transition' || runnerState?.activityProfile === 'sedentary';
 
@@ -87,10 +94,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: MapPin,
       desc: 'Calendário de provas'
     },
+    {
+      id: 'calculadora' as any,
+      label: 'Calc. Rápida Pace',
+      icon: Timer,
+      desc: 'Conversor de ritmo',
+      isTool: true
+    },
+    {
+      id: 'relogio' as any,
+      label: 'Metrônomo (SPM)',
+      icon: Volume2,
+      desc: 'Ritmo e cadência sonora',
+      isTool: true
+    },
+    {
+      id: 'pulseira' as any,
+      label: 'Pulseira de Prova',
+      icon: Award,
+      desc: 'Splits para o braço',
+      isTool: true
+    }
   ];
 
-  const handleTabClick = (tabId: AppTab) => {
-    setActiveTab(tabId);
+  const handleTabClick = (tabId: string, isTool?: boolean) => {
+    if (isTool) {
+      if (tabId === 'relogio') onOpenMetronomeModal?.();
+      else if (tabId === 'pulseira') onOpenWristbandModal?.();
+      else if (tabId === 'calculadora') onOpenPaceModal?.();
+    } else {
+      setActiveTab(tabId as AppTab);
+    }
     onCloseMobile();
   };
 
@@ -137,15 +171,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {tabsConfig.map((tab) => {
           const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
+          const isActive = activeTab === tab.id && !(tab as any).isTool;
+          const href = (tab as any).isTool ? (TAB_ROUTE_MAP as any)[tab.id] || `/${tab.id}` : TAB_ROUTE_MAP[tab.id as AppTab];
           return (
             <a
               key={tab.id}
               id={`sidebar-tab-${tab.id}`}
-              href={TAB_ROUTE_MAP[tab.id]}
+              href={href}
               onClick={(e) => {
                 e.preventDefault();
-                handleTabClick(tab.id);
+                handleTabClick(tab.id, (tab as any).isTool);
               }}
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all group cursor-pointer text-left block ${
                 isActive

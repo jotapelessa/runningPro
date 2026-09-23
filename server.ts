@@ -870,7 +870,7 @@ async function startServer() {
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`[PaceLab VDOT v3.5] Full-Stack Server running on http://0.0.0.0:${PORT}`);
+    console.log(`[PaceLab VDOT v3.6] Full-Stack Server running on http://0.0.0.0:${PORT}`);
   });
 }
 

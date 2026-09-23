@@ -46,10 +46,10 @@ export default function App() {
   const [activeTab, setActiveTabState] = useState<AppTab>(() => initialRoute.tab);
 
   // Modals
-  const [isAthleteModalOpen, setIsAthleteModalOpen] = useState<boolean>(() => initialRoute.openModal === 'atleta');
-  const [isPaceModalOpen, setIsPaceModalOpen] = useState<boolean>(false);
-  const [isMetronomeModalOpen, setIsMetronomeModalOpen] = useState<boolean>(() => initialRoute.openModal === 'metronomo');
-  const [isWristbandModalOpen, setIsWristbandModalOpen] = useState<boolean>(false);
+  const [isAthleteModalOpen, setIsAthleteModalOpenState] = useState<boolean>(() => initialRoute.openModal === 'atleta');
+  const [isPaceModalOpen, setIsPaceModalOpenState] = useState<boolean>(() => initialRoute.openModal === 'calculadora');
+  const [isMetronomeModalOpen, setIsMetronomeModalOpenState] = useState<boolean>(() => initialRoute.openModal === 'metronomo');
+  const [isWristbandModalOpen, setIsWristbandModalOpenState] = useState<boolean>(() => initialRoute.openModal === 'pulseira');
   const [isResetModalOpen, setIsResetModalOpen] = useState<boolean>(false);
   const [isDiagnosisModalOpen, setIsDiagnosisModalOpen] = useState<boolean>(false);
   const [diagnosedWorkout, setDiagnosedWorkout] = useState<ParsedWorkout | null>(null);
@@ -61,13 +61,40 @@ export default function App() {
     syncPathWithTab(tab);
   };
 
+  const setIsAthleteModalOpen = (open: boolean) => {
+    setIsAthleteModalOpenState(open);
+    syncPathWithTab(activeTab, open ? 'atleta' : undefined);
+  };
+
+  const setIsPaceModalOpen = (open: boolean) => {
+    setIsPaceModalOpenState(open);
+    syncPathWithTab(activeTab, open ? 'calculadora' : undefined);
+  };
+
+  const setIsMetronomeModalOpen = (open: boolean) => {
+    setIsMetronomeModalOpenState(open);
+    syncPathWithTab(activeTab, open ? 'metronomo' : undefined);
+  };
+
+  const setIsWristbandModalOpen = (open: boolean) => {
+    setIsWristbandModalOpenState(open);
+    syncPathWithTab(activeTab, open ? 'pulseira' : undefined);
+  };
+
+
   // Listen to browser Back/Forward (popstate)
   React.useEffect(() => {
+    if (window.location.pathname === '/') {
+      window.history.replaceState(null, '', '/atividades');
+    }
+
     const handlePopState = () => {
       const current = getTabFromPathname();
       setActiveTabState(current.tab);
-      if (current.openModal === 'metronomo') setIsMetronomeModalOpen(true);
-      if (current.openModal === 'atleta') setIsAthleteModalOpen(true);
+      setIsMetronomeModalOpenState(current.openModal === 'metronomo');
+      setIsPaceModalOpenState(current.openModal === 'calculadora');
+      setIsWristbandModalOpenState(current.openModal === 'pulseira');
+      setIsAthleteModalOpenState(current.openModal === 'atleta');
     };
 
     window.addEventListener('popstate', handlePopState);

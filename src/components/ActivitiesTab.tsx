@@ -52,6 +52,16 @@ export const ActivitiesTab: React.FC<ActivitiesTabProps> = ({
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [syncFeedback, setSyncFeedback] = useState<{ message: string; type: 'success' | 'info' } | null>(null);
 
+  // Filters & Modal State
+  const [filters, setFilters] = useState<ActivityFilter>({
+    type: 'all',
+    source: 'all',
+    period: 'all',
+    searchQuery: ''
+  });
+  const [selectedActivity, setSelectedActivity] = useState<UserActivity | null>(null);
+  const [isManualModalOpen, setIsManualModalOpen] = useState<boolean>(false);
+
   // Trigger Intervals.icu Sync
   const handleSyncIntervals = async () => {
     if (!runnerState.intervalsApiKey) {
@@ -71,10 +81,16 @@ export const ActivitiesTab: React.FC<ActivitiesTabProps> = ({
       
       // Buscar os últimos 30 dias por padrão
       const now = new Date();
-      const newest = now.toISOString();
+      
+      // Omitimos o oldest e newest para buscar por padrão, ou usamos strings precisas:
+      // A API aceita strings de data. Adicionamos 1 dia ao newest para evitar cortes de timezone
+      const newestDate = new Date();
+      newestDate.setDate(now.getDate() + 1);
+      const newest = newestDate.toISOString().split('T')[0] + 'T23:59:59Z';
+      
       const oldestDate = new Date();
       oldestDate.setDate(now.getDate() - 30);
-      const oldest = oldestDate.toISOString();
+      const oldest = oldestDate.toISOString().split('T')[0] + 'T00:00:00Z';
 
       const intervalsActivities = await fetchIntervalsActivities(
         runnerState.intervalsAthleteId || '', 
@@ -90,9 +106,9 @@ export const ActivitiesTab: React.FC<ActivitiesTabProps> = ({
       for (const act of intervalsActivities) {
         const mapped = mapIntervalsToUserActivity(act);
         const res = deduplicateOrMergeActivity(currentList, mapped);
-        if (res.wasMerged) {
+        if (res.action === 'merged') {
           mergedCount++;
-        } else if (res.wasAdded) {
+        } else if (res.action === 'inserted') {
           addedCount++;
         }
         currentList = res.updatedList;
@@ -445,7 +461,7 @@ export const ActivitiesTab: React.FC<ActivitiesTabProps> = ({
                         {act.title}
                       </h3>
                       <span className={`text-[10px] font-mono-data px-2 py-0.5 rounded-md font-semibold border ${
-                        act.source === 'intervals' || act.source === 'intervals_icu'
+                        act.source === 'intervals'
                           ? 'bg-emerald-950/60 text-emerald-400 border-emerald-500/30'
                           : 'bg-amber-950/60 text-amber-400 border-amber-500/30'
                       }`}>

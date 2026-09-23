@@ -401,7 +401,7 @@ export interface ChatMessage {
 }
 
 export type ActivityType = 'run' | 'walk' | 'trail' | 'treadmill' | 'other';
-export type ActivitySource = 'manual' | 'google_fit' | 'health_connect' | 'gpx_import';
+export type ActivitySource = 'manual' | 'google_fit' | 'health_connect' | 'gpx_import' | 'intervals';
 
 export interface RoutePoint {
   lat: number;
