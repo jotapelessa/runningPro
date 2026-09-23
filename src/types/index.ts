@@ -396,7 +396,7 @@ export interface ChatMessage {
   source?: string;
 }
 
-export type ActivityType = 'run' | 'walk' | 'trail' | 'treadmill';
+export type ActivityType = 'run' | 'walk' | 'trail' | 'treadmill' | 'other';
 export type ActivitySource = 'manual' | 'google_fit' | 'health_connect' | 'gpx_import';
 
 export interface RoutePoint {

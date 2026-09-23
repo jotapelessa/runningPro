@@ -428,11 +428,18 @@ app.get("/api/fitness/activities", async (req, res) => {
     }
 
     const fitData = await fitResponse.json();
-    const rawSessions = fitData.session || [];
+    const rawSessions: any[] = fitData.session || [];
 
-    // Enrich top recent sessions with location (GPS) and distance datasets
+    // Sort descending so the latest sessions (today, now) appear FIRST
+    rawSessions.sort((a, b) => {
+      const timeA = parseInt(a.startTimeMillis || "0", 10);
+      const timeB = parseInt(b.startTimeMillis || "0", 10);
+      return timeB - timeA;
+    });
+
+    // Enrich top 35 recent sessions with location (GPS), distance and calories datasets
     const enrichedSessions = await Promise.all(
-      rawSessions.slice(0, 10).map(async (sess: any) => {
+      rawSessions.slice(0, 35).map(async (sess: any) => {
         try {
           const startNano = `${sess.startTimeMillis}000000`;
           const endNano = `${sess.endTimeMillis}000000`;
@@ -468,24 +475,68 @@ app.get("/api/fitness/activities", async (req, res) => {
             }
           }
 
-          // Query Distance Delta dataset for exact GPS distance
+          // Query Distance datasets (Google derived + Amazfit Huami raw)
           let exactDistanceMeters = 0;
-          try {
-            const distUrl = `https://fitness.googleapis.com/fitness/v1/users/me/dataSources/derived:com.google.distance.delta:com.google.android.gms:merge_distance_deltas/datasets/${startNano}-${endNano}`;
-            const distRes = await fetch(distUrl, {
-              headers: { Authorization: `Bearer ${athleteGoogleTokens.access_token}` }
-            });
-            if (distRes.ok) {
-              const distData = await distRes.json();
-              if (Array.isArray(distData.point)) {
-                distData.point.forEach((pt: any) => {
-                  const d = pt.value?.[0]?.fpVal;
-                  if (typeof d === "number") exactDistanceMeters += d;
-                });
+          const distanceSources = [
+            "derived:com.google.distance.delta:com.google.android.gms:merge_distance_deltas",
+            "raw:com.google.distance.delta:com.huami.watch.hmwatchmanager:fitness_record_distance",
+            "raw:com.google.distance.delta:com.huami.watch.hmwatchmanager:activity_distance_data_source"
+          ];
+
+          for (const dSource of distanceSources) {
+            try {
+              const distUrl = `https://fitness.googleapis.com/fitness/v1/users/me/dataSources/${encodeURIComponent(dSource)}/datasets/${startNano}-${endNano}`;
+              const distRes = await fetch(distUrl, {
+                headers: { Authorization: `Bearer ${athleteGoogleTokens.access_token}` }
+              });
+              if (distRes.ok) {
+                const distData = await distRes.json();
+                if (Array.isArray(distData.point) && distData.point.length > 0) {
+                  let dSum = 0;
+                  distData.point.forEach((pt: any) => {
+                    const d = pt.value?.[0]?.fpVal;
+                    if (typeof d === "number") dSum += d;
+                  });
+                  if (dSum > 0) {
+                    exactDistanceMeters = dSum;
+                    break; // Found reliable distance
+                  }
+                }
               }
+            } catch {
+              // try next distance stream
             }
-          } catch {
-            // distance fallback
+          }
+
+          // Query Calories dataset (Google derived + Amazfit Huami)
+          let exactCalories: number | undefined;
+          const calSources = [
+            "raw:com.google.calories.expended:com.huami.watch.hmwatchmanager:fitness_record_calories",
+            "derived:com.google.calories.expended:com.google.android.gms:merge_calories_expended"
+          ];
+          for (const cSource of calSources) {
+            try {
+              const calUrl = `https://fitness.googleapis.com/fitness/v1/users/me/dataSources/${encodeURIComponent(cSource)}/datasets/${startNano}-${endNano}`;
+              const calRes = await fetch(calUrl, {
+                headers: { Authorization: `Bearer ${athleteGoogleTokens.access_token}` }
+              });
+              if (calRes.ok) {
+                const calData = await calRes.json();
+                if (Array.isArray(calData.point) && calData.point.length > 0) {
+                  let cSum = 0;
+                  calData.point.forEach((pt: any) => {
+                    const c = pt.value?.[0]?.fpVal;
+                    if (typeof c === "number") cSum += c;
+                  });
+                  if (cSum > 0) {
+                    exactCalories = Math.round(cSum);
+                    break;
+                  }
+                }
+              }
+            } catch {
+              // ignore
+            }
           }
 
           // Query Heart Rate dataset
@@ -514,10 +565,21 @@ app.get("/api/fitness/activities", async (req, res) => {
             // hr fallback
           }
 
+          // Intelligent naming for unnamed sessions
+          let friendlyName = sess.name;
+          if (!friendlyName || friendlyName.trim() === "") {
+            if (sess.activityType === 8) friendlyName = "Corrida • Amazfit";
+            else if (sess.activityType === 7) friendlyName = "Caminhada • Amazfit";
+            else if (sess.activityType === 108) friendlyName = "Treino Físico • Amazfit";
+            else friendlyName = "Atividade • Amazfit";
+          }
+
           return {
             ...sess,
+            name: friendlyName,
             routePoints,
             exactDistanceMeters: exactDistanceMeters > 0 ? Math.round(exactDistanceMeters) : undefined,
+            exactCalories,
             avgHeartRate
           };
         } catch (enrichErr) {

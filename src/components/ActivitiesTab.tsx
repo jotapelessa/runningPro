@@ -368,7 +368,8 @@ export const ActivitiesTab: React.FC<ActivitiesTabProps> = ({
                 { id: 'all', label: 'Todos' },
                 { id: 'run', label: 'Corridas' },
                 { id: 'walk', label: 'Caminhadas' },
-                { id: 'trail', label: 'Trilha' }
+                { id: 'trail', label: 'Trilha' },
+                { id: 'other', label: 'Treino Geral' }
               ].map(t => (
                 <button
                   key={t.id}
@@ -426,9 +427,17 @@ export const ActivitiesTab: React.FC<ActivitiesTabProps> = ({
                   <div className={`p-3 rounded-2xl border flex-shrink-0 transition-transform group-hover:scale-105 ${
                     act.type === 'walk'
                       ? 'bg-amber-950/30 border-amber-500/40 text-amber-400'
+                      : act.type === 'other'
+                      ? 'bg-purple-950/30 border-purple-500/40 text-purple-400'
                       : 'bg-[#FF4E00]/10 border-[#FF4E00]/30 text-[#FF4E00]'
                   }`}>
-                    {act.type === 'walk' ? <Compass className="w-5 h-5" /> : <ActivityIcon className="w-5 h-5" />}
+                    {act.type === 'walk' ? (
+                      <Compass className="w-5 h-5" />
+                    ) : act.type === 'other' ? (
+                      <Sparkles className="w-5 h-5" />
+                    ) : (
+                      <ActivityIcon className="w-5 h-5" />
+                    )}
                   </div>
 
                   <div className="space-y-1">

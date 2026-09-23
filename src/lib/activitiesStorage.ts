@@ -1,4 +1,4 @@
-import { UserActivity, GoogleSyncState, RoutePoint, ActivitySplit } from '../types';
+import { UserActivity, GoogleSyncState, RoutePoint, ActivitySplit, ActivityType } from '../types';
 import { calculateVDOT, formatPace, formatTime } from './vdotCalculator';
 
 const STORAGE_KEY_ACTIVITIES = 'pacelab_user_activities_v3.5';
@@ -273,6 +273,35 @@ export function deduplicateOrMergeActivity(
   existingList: UserActivity[],
   incoming: UserActivity
 ): { updatedList: UserActivity[]; action: 'inserted' | 'merged' | 'ignored'; matchedId?: string } {
+  // First, check direct syncId match or exact ID match
+  if (incoming.syncId) {
+    const idMatchIndex = existingList.findIndex(e => e.syncId === incoming.syncId || e.id === incoming.id);
+    if (idMatchIndex >= 0) {
+      const existing = existingList[idMatchIndex];
+      const merged: UserActivity = {
+        ...existing,
+        title: incoming.title || existing.title,
+        distanceKm: incoming.distanceKm > 0 ? incoming.distanceKm : existing.distanceKm,
+        distanceMeters: incoming.distanceMeters > 0 ? incoming.distanceMeters : existing.distanceMeters,
+        durationSeconds: incoming.durationSeconds > 0 ? incoming.durationSeconds : existing.durationSeconds,
+        durationFormatted: incoming.durationFormatted || existing.durationFormatted,
+        paceSecondsPerKm: incoming.paceSecondsPerKm || existing.paceSecondsPerKm,
+        paceFormatted: incoming.paceFormatted || existing.paceFormatted,
+        calories: incoming.calories || existing.calories,
+        avgHr: incoming.avgHr || existing.avgHr,
+        maxHr: incoming.maxHr || existing.maxHr,
+        route: (incoming.route && incoming.route.length > 0) ? incoming.route : existing.route,
+        splits: (incoming.splits && incoming.splits.length > 0) ? incoming.splits : existing.splits,
+        vdot: incoming.vdot || existing.vdot,
+        sourceLabel: incoming.sourceLabel || existing.sourceLabel,
+        syncedAt: new Date().toISOString()
+      };
+      const nextList = [...existingList];
+      nextList[idMatchIndex] = merged;
+      return { updatedList: nextList, action: 'merged', matchedId: existing.id };
+    }
+  }
+
   const incomingTime = new Date(incoming.date).getTime();
 
   const matchIndex = existingList.findIndex(existing => {
@@ -288,12 +317,12 @@ export function deduplicateOrMergeActivity(
       (existing.type === 'trail' && incoming.type === 'run');
     if (!sameType) return false;
 
-    // 3. Distance proximity check (within 5% or 250m)
+    // 3. Distance proximity check (within 8% or 300m)
     const distDiffKm = Math.abs(existing.distanceKm - incoming.distanceKm);
     const distDiffPct = distDiffKm / Math.max(existing.distanceKm, 0.1);
     if (distDiffKm > 0.3 && distDiffPct > 0.08) return false;
 
-    // 4. Duration proximity check (within 10% or 120s)
+    // 4. Duration proximity check (within 10% or 180s)
     const durDiffSec = Math.abs(existing.durationSeconds - incoming.durationSeconds);
     const durDiffPct = durDiffSec / Math.max(existing.durationSeconds, 1);
     if (durDiffSec > 180 && durDiffPct > 0.1) return false;
@@ -347,7 +376,7 @@ export async function simulateGoogleFitSync(
   syncState: GoogleSyncState 
 }> {
   // Simulate network delay for real API experience
-  await new Promise(resolve => setTimeout(resolve, 1400));
+  await new Promise(resolve => setTimeout(resolve, 800));
 
   let incomingFromGoogle: UserActivity[] = [];
 
@@ -359,32 +388,36 @@ export async function simulateGoogleFitSync(
         incomingFromGoogle = data.sessions.map((sess: any) => {
           const startMs = parseInt(sess.startTimeMillis, 10) || Date.now();
           const endMs = parseInt(sess.endTimeMillis, 10) || startMs + 1800000;
-          const durationSeconds = Math.max(60, Math.round((endMs - startMs) / 1000));
+          const durationSeconds = Math.max(30, Math.round((endMs - startMs) / 1000));
           const isRun = sess.activityType === 8;
           const isWalk = sess.activityType === 7 || (sess.name && sess.name.toLowerCase().includes('walk'));
-          const type = isRun ? 'run' : isWalk ? 'walk' : 'run';
+          const isOther = sess.activityType === 108 || (sess.name && sess.name.toLowerCase().includes('outros'));
+          const type: 'run' | 'walk' | 'other' = isRun ? 'run' : isWalk ? 'walk' : isOther ? 'other' : 'run';
           
           // Use exact distance if available from Google Fit datasets, otherwise estimate
           let distanceMeters = sess.exactDistanceMeters || 0;
           let distanceKm = 0;
-          if (distanceMeters > 500) {
+          if (distanceMeters > 50) {
             distanceKm = Math.round((distanceMeters / 1000) * 100) / 100;
-          } else {
-            const estSpeedKmh = isRun ? 11.5 : 5.4;
+          } else if (!isOther) {
+            const estSpeedKmh = isRun ? 10.5 : 5.2;
             distanceKm = Math.round((estSpeedKmh * (durationSeconds / 3600)) * 100) / 100;
             distanceMeters = Math.round(distanceKm * 1000);
           }
 
-          const paceSec = distanceKm > 0 ? Math.round(durationSeconds / distanceKm) : 360;
+          const paceSec = distanceKm > 0 ? Math.round(durationSeconds / distanceKm) : 0;
           const avgHr = sess.avgHeartRate;
+          const calories = sess.exactCalories || (distanceKm > 0 ? Math.round(distanceKm * 65) : Math.round((durationSeconds / 60) * 6));
           
           const appName = sess.application?.packageName?.includes('huami') 
             ? 'Amazfit (Zepp)' 
             : 'Google Fit';
 
-          const title = sess.name === 'Walk' ? 'Caminhada • Amazfit'
-            : sess.name === 'Outros' ? 'Treino Físico • Amazfit'
-            : sess.name || (isRun ? 'Corrida Google Fit' : isWalk ? 'Caminhada Google Fit' : 'Atividade Google Fit');
+          const title = sess.name 
+            ? sess.name 
+            : isRun ? 'Corrida • Amazfit' 
+            : isWalk ? 'Caminhada • Amazfit' 
+            : 'Treino Físico • Amazfit';
 
           const route = Array.isArray(sess.routePoints) && sess.routePoints.length >= 2 
             ? sess.routePoints 
@@ -402,10 +435,11 @@ export async function simulateGoogleFitSync(
             durationSeconds,
             durationFormatted: formatTime(durationSeconds),
             paceSecondsPerKm: paceSec,
-            paceFormatted: formatPace(paceSec),
-            speedAvgKmh: Math.round((distanceKm / (durationSeconds / 3600)) * 10) / 10,
-            speedMaxKmh: Math.round((distanceKm / (durationSeconds / 3600)) * 1.18 * 10) / 10,
+            paceFormatted: paceSec > 0 ? formatPace(paceSec) : '--:--',
+            speedAvgKmh: distanceKm > 0 ? Math.round((distanceKm / (durationSeconds / 3600)) * 10) / 10 : 0,
+            speedMaxKmh: distanceKm > 0 ? Math.round((distanceKm / (durationSeconds / 3600)) * 1.18 * 10) / 10 : 0,
             avgHr,
+            calories,
             route,
             vdot: isRun && distanceMeters >= 1500 ? Math.round(calculateVDOT(distanceMeters, durationSeconds) * 10) / 10 : undefined,
             notes: `Importado de ${appName} via Google Fitness REST API.` + (route ? ` Rota com ${route.length} coordenadas GPS.` : ''),
@@ -495,7 +529,7 @@ export async function simulateGoogleFitSync(
  */
 export function createManualActivity(params: {
   title: string;
-  type: 'run' | 'walk' | 'trail' | 'treadmill';
+  type: ActivityType;
   date: string;
   distanceKm: number;
   durationSeconds: number;
