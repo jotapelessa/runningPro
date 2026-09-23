@@ -517,7 +517,7 @@ export function createManualActivity(params: {
  */
 export function resetUserActivities(): UserActivity[] {
   try {
-    localStorage.removeItem(STORAGE_KEY_ACTIVITIES);
+    localStorage.setItem(STORAGE_KEY_ACTIVITIES, JSON.stringify([]));
     localStorage.removeItem(STORAGE_KEY_SYNC);
   } catch (e) {
     console.error('Failed to reset user activities:', e);

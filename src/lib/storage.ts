@@ -139,7 +139,14 @@ export const INITIAL_RECOVERY_LOGS: DailyRecoveryCheckin[] = [
 export function loadRunnerState(): RunnerState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_RUNNER);
-    if (raw) return { ...DEFAULT_RUNNER_STATE, ...JSON.parse(raw) };
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      // Se foi salvo explicitamente como não calibrado / zerado, preserva o estado zerado
+      if (parsed.isCalibrated === false) {
+        return { ...UNCALIBRATED_RUNNER_STATE, ...parsed };
+      }
+      return { ...DEFAULT_RUNNER_STATE, ...parsed };
+    }
   } catch (e) {
     console.error('Failed to load runner state:', e);
   }
@@ -238,6 +245,7 @@ export function resetAllAppData(): {
     localStorage.removeItem(STORAGE_KEY_HISTORY);
     localStorage.removeItem(STORAGE_KEY_PLAN);
     localStorage.removeItem(STORAGE_KEY_RECOVERY);
+    localStorage.removeItem('pacelab_completed_calendar_dates');
     resetUserActivities();
     
     // Save clean uncalibrated state
