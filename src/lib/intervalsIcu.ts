@@ -40,9 +40,9 @@ export interface IntervalsActivity {
  * Cria o Header de Autenticação usando Basic Auth.
  */
 function getAuthHeaders(athleteId: string, apiKey: string): HeadersInit {
-  // A documentação do Intervals.icu permite usar "API_KEY" como username
-  // ou o próprio ID do atleta.
-  const username = athleteId || 'API_KEY';
+  // A documentação do Intervals.icu requer que o username seja "API_KEY" 
+  // e o password seja a própria API Key.
+  const username = 'API_KEY';
   const credentials = btoa(`${username}:${apiKey}`);
   return {
     'Authorization': `Basic ${credentials}`,
