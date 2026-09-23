@@ -416,11 +416,16 @@ app.get("/api/fitness/activities", async (req, res) => {
     // Call Google Fitness REST API Sessions endpoint
     const now = Date.now();
     const oneMonthAgo = now - 30 * 24 * 60 * 60 * 1000;
-    const fitnessUrl = `https://fitness.googleapis.com/fitness/v1/users/me/sessions?startTime=${new Date(oneMonthAgo).toISOString()}&endTime=${new Date(now).toISOString()}`;
+    const tomorrow = now + 24 * 60 * 60 * 1000; // 1 day in future to avoid clock skew dropping recent sessions
+    const fitnessUrl = `https://fitness.googleapis.com/fitness/v1/users/me/sessions?startTime=${new Date(oneMonthAgo).toISOString()}&endTime=${new Date(tomorrow).toISOString()}`;
 
     const fitResponse = await fetch(fitnessUrl, {
       headers: { Authorization: `Bearer ${athleteGoogleTokens.access_token}` }
     });
+
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
 
     if (!fitResponse.ok) {
       const errData = await fitResponse.json();

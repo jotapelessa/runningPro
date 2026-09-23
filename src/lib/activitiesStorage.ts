@@ -381,7 +381,7 @@ export async function simulateGoogleFitSync(
   let incomingFromGoogle: UserActivity[] = [];
 
   try {
-    const res = await fetch('/api/fitness/activities');
+    const res = await fetch('/api/fitness/activities?t=' + Date.now());
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data.sessions) && data.sessions.length > 0) {
@@ -450,49 +450,7 @@ export async function simulateGoogleFitSync(
       }
     }
   } catch (err) {
-    console.warn('Real Google Fit sessions fetch failed, using fallback:', err);
-  }
-
-  // Fallback default sample workout if no sessions found
-  if (incomingFromGoogle.length === 0) {
-    incomingFromGoogle = [
-      {
-        id: `gfit-${Date.now()}-1`,
-        title: 'Corrida • Google Fit Sync',
-        type: 'run',
-        source: 'google_fit',
-        sourceLabel: 'Google Fit REST API',
-        date: new Date().toISOString().split('T')[0] + 'T07:15:00',
-        distanceKm: 6.2,
-        distanceMeters: 6200,
-        durationSeconds: 1674,
-        durationFormatted: '27:54',
-        paceSecondsPerKm: 270,
-        paceFormatted: '4:30',
-        speedAvgKmh: 13.3,
-        speedMaxKmh: 15.1,
-        avgHr: 160,
-        maxHr: 172,
-        calories: 430,
-        elevationGainMeters: 28,
-        elevationLossMeters: 26,
-        cadenceSpm: 178,
-        vdot: 46.8,
-        notes: 'Sincronizado automaticamente via Google Fit / Health Connect API.',
-        route: IBIRAPUERA_COORDS,
-        splits: [
-          { km: 1, paceFormatted: '4:40', paceSeconds: 280, avgHr: 145, elevationDiffM: 4, durationSeconds: 280 },
-          { km: 2, paceFormatted: '4:32', paceSeconds: 272, avgHr: 156, elevationDiffM: 5, durationSeconds: 272 },
-          { km: 3, paceFormatted: '4:28', paceSeconds: 268, avgHr: 162, elevationDiffM: 6, durationSeconds: 268 },
-          { km: 4, paceFormatted: '4:26', paceSeconds: 266, avgHr: 165, elevationDiffM: 3, durationSeconds: 266 },
-          { km: 5, paceFormatted: '4:25', paceSeconds: 265, avgHr: 168, elevationDiffM: 5, durationSeconds: 265 },
-          { km: 6, paceFormatted: '4:29', paceSeconds: 269, avgHr: 170, elevationDiffM: 4, durationSeconds: 269 },
-          { km: 7, paceFormatted: '4:30', paceSeconds: 90, avgHr: 172, elevationDiffM: 1, durationSeconds: 90 }
-        ],
-        syncId: `sync_${Date.now()}`,
-        syncedAt: new Date().toISOString()
-      }
-    ];
+    console.warn('Google Fit sessions fetch failed:', err);
   }
 
   let list = [...currentList];
