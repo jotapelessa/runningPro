@@ -11,13 +11,14 @@ import {
   Activity,
   AlertCircle
 } from 'lucide-react';
-import { ChatMessage, RunnerState } from '../types';
+import { ChatMessage, RunnerState, UserActivity } from '../types';
 
 interface CoachChatProps {
   runnerState: RunnerState;
+  activities?: UserActivity[];
 }
 
-export const CoachChat: React.FC<CoachChatProps> = ({ runnerState }) => {
+export const CoachChat: React.FC<CoachChatProps> = ({ runnerState, activities = [] }) => {
   const [isOpen, setIsOpen] = useState(false);
   const isTransitionUser = runnerState.level === 'sedentary_transition' || runnerState.activityProfile === 'sedentary';
 
@@ -27,7 +28,7 @@ export const CoachChat: React.FC<CoachChatProps> = ({ runnerState }) => {
       role: 'assistant',
       text: isTransitionUser
         ? `👋 Olá, **${runnerState.name}**! Eu sou seu **Treinador IA PaceLab (Fisiologista de Transição)**.\n\nIdentifiquei que você está na **Fase de Adaptação Musculoesquelética** (método Caminha-Corre). Minha prioridade com você é **proteger seus tendões e articulações** e garantir que você evolua sem canelite e sem esgotamento.\n\nComo posso te orientar sobre seu trote leve, respiração ou dores hoje?`
-        : `👋 Olá, **${runnerState.name}**! Eu sou seu **Treinador IA PaceLab VDOT**.\n\nEstou calibrado com seu VDOT atual de **${runnerState.currentVdot.toFixed(1)}** e volume de **${runnerState.weeklyVolume} km/sem**.\n\nComo posso ajudar você com suas zonas de ritmo, progressão de carga ou prevenção de lesões hoje?`,
+        : `👋 Olá, **${runnerState.name}**! Eu sou seu **Treinador IA PaceLab VDOT**.\n\nEstou calibrado com seu VDOT atual de **${runnerState.currentVdot.toFixed(1)}**, volume de **${runnerState.weeklyVolume} km/sem** e acompanho suas atividades sincronizadas.\n\nComo posso ajudar você com suas zonas de ritmo, análise dos últimos treinos ou prevenção de lesões hoje?`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     }
   ]);
@@ -36,19 +37,18 @@ export const CoachChat: React.FC<CoachChatProps> = ({ runnerState }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const quickChips = isTransitionUser ? [
+    'Analise meus treinos recentes sincronizados',
     'Como saber se meu trote está leve o suficiente?',
     'Senti uma fisgada na canela ao alternar 250m',
     'Posso fazer o caminha-corre na esteira ou na rua?',
-    'Quando estarei pronto para o teste formal de VDOT?',
-    'Qual a melhor postura e cadência curta para proteger o joelho?'
+    'Quando estarei pronto para o teste formal de VDOT?'
   ] : [
+    'Analise meu volume e treinos recentes sincronizados',
     'Como distribuir meu volume semanal?',
     'Qual meu teto seguro de tiros (≤ 8%)?',
     'Estou sentindo dor na canela, o que fazer?',
-    'Como respirar durante o Pace T (Limiar)?',
-    'Estratégia de nutrição para 21k/42k'
+    'Como respirar durante o Pace T (Limiar)?'
   ];
-
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -76,35 +76,119 @@ export const CoachChat: React.FC<CoachChatProps> = ({ runnerState }) => {
     setInputText('');
     setLoading(true);
 
+    const botMessageId = `bot-${Date.now()}`;
+    let botReplyCreated = false;
+
     try {
-      const response = await fetch('/api/coach', {
+      const response = await fetch('/api/coach/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: newHistory,
           runnerState,
           userPrompt: text.trim(),
+          activities,
         }),
       });
 
-      const data = await response.json();
-      const botReply: ChatMessage = {
-        id: `bot-${Date.now()}`,
-        role: 'assistant',
-        text: data.text || 'Entendido! Siga rigorosamente suas zonas de FC e pace.',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
+      if (!response.ok || !response.body) {
+        throw new Error(`Stream HTTP error: ${response.status}`);
+      }
 
-      setMessages((prev) => [...prev, botReply]);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let accumulatedText = '';
+      let buffer = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (line.startsWith('data:')) {
+            try {
+              const dataPayload = JSON.parse(line.substring(5).trim());
+              if (dataPayload.text) {
+                accumulatedText += dataPayload.text;
+
+                if (!botReplyCreated) {
+                  botReplyCreated = true;
+                  setLoading(false);
+                  setMessages((prev) => [
+                    ...prev,
+                    {
+                      id: botMessageId,
+                      role: 'assistant',
+                      text: accumulatedText,
+                      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    }
+                  ]);
+                } else {
+                  setMessages((prev) =>
+                    prev.map((msg) =>
+                      msg.id === botMessageId ? { ...msg, text: accumulatedText } : msg
+                    )
+                  );
+                }
+              }
+            } catch (jsonErr) {
+              // Ignore partial or non-json SSE lines
+            }
+          }
+        }
+      }
+
+      // If finished stream without receiving text chunk, fallback
+      if (!accumulatedText) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: botMessageId,
+            role: 'assistant',
+            text: 'Entendido! Siga rigorosamente suas zonas de FC e pace.',
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          }
+        ]);
+      }
     } catch (err) {
-      console.error('Coach chat error:', err);
-      const errorReply: ChatMessage = {
-        id: `bot-${Date.now()}`,
-        role: 'assistant',
-        text: 'Desculpe, tive uma instabilidade temporária na conexão. Lembre-se: mantenha pelo menos 75% da sua semana em Z2 (Pace E) para recuperação garantida.',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
-      setMessages((prev) => [...prev, errorReply]);
+      console.error('Coach chat stream error, trying fallback standard POST:', err);
+      try {
+        const responseFallback = await fetch('/api/coach', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: newHistory,
+            runnerState,
+            userPrompt: text.trim(),
+            activities,
+          }),
+        });
+        const fallbackData = await responseFallback.json();
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `bot-fallback-${Date.now()}`,
+            role: 'assistant',
+            text: fallbackData.text || 'Lembre-se: mantenha pelo menos 75% da sua semana em Z2 (Pace E) para recuperação garantida.',
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          }
+        ]);
+      } catch (finalErr) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `bot-err-${Date.now()}`,
+            role: 'assistant',
+            text: 'Desculpe, tive uma instabilidade temporária na conexão. Mantenha os treinos fáceis em Z2 e hidrate-se bem.',
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          }
+        ]);
+      }
     } finally {
       setLoading(false);
     }

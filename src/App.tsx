@@ -433,7 +433,7 @@ export default function App() {
       />
 
       {/* Floating AI Coach Gemini Assistant */}
-      <CoachChat runnerState={runnerState} />
+      <CoachChat runnerState={runnerState} activities={activities} />
 
       {/* Telemetry Footer */}
       <footer className="border-t border-white/10 bg-[#0A0A0A] mt-12 py-6 text-xs text-slate-500 no-print">

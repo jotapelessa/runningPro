@@ -41,7 +41,7 @@ app.get("/api/health", (req, res) => {
 // 2. AI Coach endpoint (VDOT Expert & Exercise Physiologist)
 app.post("/api/coach", async (req, res) => {
   try {
-    const { messages, runnerState, userPrompt } = req.body;
+    const { messages, runnerState, userPrompt, activities } = req.body;
 
     const ai = getGeminiClient();
     if (!ai) {
@@ -51,6 +51,16 @@ app.post("/api/coach", async (req, res) => {
     }
 
     const isTransition = runnerState?.level === 'sedentary_transition' || runnerState?.activityProfile === 'sedentary';
+
+    // Format recent athlete activities (Google Fit / Amazfit / GPS)
+    let recentActivitiesContext = "Nenhuma atividade recente registrada.";
+    if (activities && Array.isArray(activities) && activities.length > 0) {
+      recentActivitiesContext = activities.slice(0, 5).map((act: any, idx: number) => {
+        const typeLabel = act.type === 'run' ? 'Corrida' : act.type === 'walk' ? 'Caminhada' : act.type;
+        const hrInfo = act.avgHr ? ` | FC Média: ${act.avgHr} bpm` : '';
+        return `[Atividade ${idx + 1}] ${act.date ? new Date(act.date).toLocaleDateString('pt-BR') : ''} - ${typeLabel}: ${act.distanceKm?.toFixed(2) || 0} km em ${act.durationFormatted || 'N/A'} (Pace: ${act.paceFormatted || 'N/A'}/km${hrInfo}) [Origem: ${act.sourceLabel || act.source || 'Zepp/Fit'}]`;
+      }).join('\n');
+    }
 
     const systemInstruction = `Você é o "Treinador IA PaceLab VDOT", um fisiologista do exercício e treinador sênior de corrida de rua, especialista rigoroso na metodologia VDOT do Dr. Jack Daniels e na fórmula de Frequência Cardíaca de Reserva de Karvonen.
 
@@ -66,19 +76,22 @@ DADOS ATUAIS DO ATLETA:
 - Histórico de Dores Ativas: ${JSON.stringify(runnerState?.pains || [])}
 - Provas/Metas: ${runnerState?.goal || 'Retomar o condicionamento com segurança sem dor'}
 
+ÚLTIMOS TREINOS REAIS SINCRONIZADOS (Amazfit Zepp / Google Fit):
+${recentActivitiesContext}
+
 DIRETRIZES E REGRAS INVIOLÁVEIS DE PRESCRIÇÃO:
 1. Responda SEMPRE em Português do Brasil (pt-BR), com tom acolhedor, encorajador, técnico e protetor.
-${isTransition ? `2. DIRETRIZ FUNDAMENTAL PARA INICIANTES/SEDENTÁRIOS:
+2. Reconheça e comente os treinos recentes do atleta caso faça sentido na conversa (ex: parabenizando pela regularidade ou sugerindo ajustes de ritmo e recuperação baseados nos dados reais).
+${isTransition ? `3. DIRETRIZ FUNDAMENTAL PARA INICIANTES/SEDENTÁRIOS:
    - Este atleta está na FASE DE TRANSIÇÃO (Caminha-Corre). Ele alterna frações curtas de trote (ex: 1 min ou 250m) com caminhada.
    - NUNCA prescreva treinos all-out, testes de 5k no limite ou tiros de velocidade (Pace I/R)!
    - O foco absoluto é ADAPTAÇÃO MECÂNICA (fortalecer tendões de Aquiles, fáscia plantar, cartilagens e canelas).
    - Oriente SEMPRE o trote pelo TESTE DA FALA (ritmo em que consiga falar frases curtas) e Esforço RPE 6/10.
-   - Apenas quando o atleta conseguir correr 3 km de forma ininterrupta e confortável ele deverá realizar um teste formal de VDOT.` : `2. Zonas de Pace Daniels: E (Fácil/Regenerativo), M (Ritmo Maratona), T (Limiar de Lactato/Threshold), I (Intervalado/VO2Max), R (Repetições/Economia).
-3. Regra dos 8%: O volume total de tiros em intensidade I/R na semana NUNCA deve ultrapassar 8% do volume semanal total do atleta. Se o atleta pedir mais, alerte com veemência!`}
-4. Regra dos 10%: A progressão de volume semanal máximo é de 10% por semana, com semana regenerativa a cada 3-4 semanas.
-5. Se o atleta relatar dor moderada ou severa (especialmente canelites, tendão de aquiles, fáscia plantar ou joelho), ordene redução de 30% a 50% do volume, suspensão imediata de trote, foco em caminhada, repouso e crioterapia (gelo).
-6. Use formatação limpa em Markdown com tópicos claros e objetivos.`;
-
+   - Apenas quando o atleta conseguir correr 3 km de forma ininterrupta e confortável ele deverá realizar um teste formal de VDOT.` : `3. Zonas de Pace Daniels: E (Fácil/Regenerativo), M (Ritmo Maratona), T (Limiar de Lactato/Threshold), I (Intervalado/VO2Max), R (Repetições/Economia).
+4. Regra dos 8%: O volume total de tiros em intensidade I/R na semana NUNCA deve ultrapassar 8% do volume semanal total do atleta. Se o atleta pedir mais, alerte com veemência!`}
+5. Regra dos 10%: A progressão de volume semanal máximo é de 10% por semana, com semana regenerativa a cada 3-4 semanas.
+6. Se o atleta relatar dor moderada ou severa (especialmente canelites, tendão de aquiles, fáscia plantar ou joelho), ordene redução de 30% a 50% do volume, suspensão imediata de trote, foco em caminhada, repouso e crioterapia (gelo).
+7. Use formatação limpa em Markdown com tópicos claros e objetivos.`;
 
     // Format conversation history for Gemini API
     let promptText = "";
@@ -124,6 +137,122 @@ ${isTransition ? `2. DIRETRIZ FUNDAMENTAL PARA INICIANTES/SEDENTÁRIOS:
       source: "local-expert-fallback",
       error: error?.message || "AI service temporary error",
     });
+  }
+});
+
+// 2.1 AI Coach SSE Streaming Endpoint (Real-time token stream)
+app.post("/api/coach/stream", async (req, res) => {
+  const { messages, runnerState, userPrompt, activities } = req.body;
+
+  // Set SSE response headers with Nginx unbuffered streaming header
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-cache, no-transform",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+
+  const sendEvent = (event: string, data: any) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  const ai = getGeminiClient();
+  if (!ai) {
+    const fallbackResponse = generateLocalCoachAdvice(userPrompt || (messages && messages[messages.length - 1]?.text) || "", runnerState);
+    sendEvent("chunk", { text: fallbackResponse });
+    sendEvent("done", { source: "local-expert-engine" });
+    return res.end();
+  }
+
+  const isTransition = runnerState?.level === 'sedentary_transition' || runnerState?.activityProfile === 'sedentary';
+
+  let recentActivitiesContext = "Nenhuma atividade recente registrada.";
+  if (activities && Array.isArray(activities) && activities.length > 0) {
+    recentActivitiesContext = activities.slice(0, 5).map((act: any, idx: number) => {
+      const typeLabel = act.type === 'run' ? 'Corrida' : act.type === 'walk' ? 'Caminhada' : act.type;
+      const hrInfo = act.avgHr ? ` | FC Média: ${act.avgHr} bpm` : '';
+      return `[Atividade ${idx + 1}] ${act.date ? new Date(act.date).toLocaleDateString('pt-BR') : ''} - ${typeLabel}: ${act.distanceKm?.toFixed(2) || 0} km em ${act.durationFormatted || 'N/A'} (Pace: ${act.paceFormatted || 'N/A'}/km${hrInfo}) [Origem: ${act.sourceLabel || act.source || 'Zepp/Fit'}]`;
+    }).join('\n');
+  }
+
+  const systemInstruction = `Você é o "Treinador IA PaceLab VDOT", um fisiologista do exercício e treinador sênior de corrida de rua, especialista rigoroso na metodologia VDOT do Dr. Jack Daniels e na fórmula de Frequência Cardíaca de Reserva de Karvonen.
+
+DADOS ATUAIS DO ATLETA:
+- Nome: ${runnerState?.name || 'Atleta'}
+- Perfil / Nível: ${runnerState?.level || 'sedentary_transition'}
+- Estágio de Treino: ${isTransition ? 'FASE 0: TRANSIÇÃO SEGURA / MÉTODO CAMINHA-CORRE (RUN-WALK)' : 'CORREDOR ATIVO COM ZONAS VDOT'}
+- VDOT Atual: ${runnerState?.currentVdot || 30.0} (VO2Max: ${runnerState?.currentVo2max || 30.0} ml/kg/min)
+- Volume Semanal Atual: ${runnerState?.weeklyVolume || 12} km
+- Semanas Ativo: ${runnerState?.weeksActive || 0}
+- FC Máxima: ${runnerState?.macHR || 185} bpm | FC Repouso: ${runnerState?.restHR || 70} bpm
+- Dias de treino por semana: ${runnerState?.trainingDays || 3}
+- Histórico de Dores Ativas: ${JSON.stringify(runnerState?.pains || [])}
+- Provas/Metas: ${runnerState?.goal || 'Retomar o condicionamento com segurança sem dor'}
+
+ÚLTIMOS TREINOS REAIS SINCRONIZADOS (Amazfit Zepp / Google Fit):
+${recentActivitiesContext}
+
+DIRETRIZES E REGRAS INVIOLÁVEIS DE PRESCRIÇÃO:
+1. Responda SEMPRE em Português do Brasil (pt-BR), com tom acolhedor, encorajador, técnico e protetor.
+2. Reconheça e comente os treinos recentes do atleta caso faça sentido na conversa (ex: parabenizando pela regularidade ou sugerindo ajustes de ritmo e recuperação baseados nos dados reais).
+${isTransition ? `3. DIRETRIZ FUNDAMENTAL PARA INICIANTES/SEDENTÁRIOS:
+   - Este atleta está na FASE DE TRANSIÇÃO (Caminha-Corre). Ele alterna frações curtas de trote (ex: 1 min ou 250m) com caminhada.
+   - NUNCA prescreva treinos all-out, testes de 5k no limite ou tiros de velocidade (Pace I/R)!
+   - O foco absoluto é ADAPTAÇÃO MECÂNICA (fortalecer tendões de Aquiles, fáscia plantar, cartilagens e canelas).
+   - Oriente SEMPRE o trote pelo TESTE DA FALA (ritmo em que consiga falar frases curtas) e Esforço RPE 6/10.
+   - Apenas quando o atleta conseguir correr 3 km de forma ininterrupta e confortável ele deverá realizar um teste formal de VDOT.` : `3. Zonas de Pace Daniels: E (Fácil/Regenerativo), M (Ritmo Maratona), T (Limiar de Lactato/Threshold), I (Intervalado/VO2Max), R (Repetições/Economia).
+4. Regra dos 8%: O volume total de tiros em intensidade I/R na semana NUNCA deve ultrapassar 8% do volume semanal total do atleta. Se o atleta pedir mais, alerte com veemência!`}
+5. Regra dos 10%: A progressão de volume semanal máximo é de 10% por semana, com semana regenerativa a cada 3-4 semanas.
+6. Se o atleta relatar dor moderada ou severa (especialmente canelites, tendão de aquiles, fáscia plantar ou joelho), ordene redução de 30% a 50% do volume, suspensão imediata de trote, foco em caminhada, repouso e crioterapia (gelo).
+7. Use formatação limpa em Markdown com tópicos claros e objetivos.`;
+
+  let promptText = "";
+  if (messages && Array.isArray(messages)) {
+    promptText = messages.map((m: any) => `${m.role === 'user' ? 'Atleta' : 'Treinador'}: ${m.text}`).join('\n\n');
+    if (userPrompt) promptText += `\n\nAtleta: ${userPrompt}`;
+  } else {
+    promptText = userPrompt || "Olá treinador, como posso melhorar minha performance?";
+  }
+
+  try {
+    let streamResult;
+    try {
+      streamResult = await ai.models.generateContentStream({
+        model: "gemini-3.8-flash",
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: `${systemInstruction}\n\n--- HISTÓRICO DA CONVERSA / PERGUNTA ATUAL ---\n${promptText}` }],
+          }
+        ],
+      });
+    } catch (e: any) {
+      console.warn("Primary stream model failed, attempting gemini-3.6-flash fallback:", e?.message);
+      streamResult = await ai.models.generateContentStream({
+        model: "gemini-3.6-flash",
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: `${systemInstruction}\n\n--- HISTÓRICO DA CONVERSA / PERGUNTA ATUAL ---\n${promptText}` }],
+          }
+        ],
+      });
+    }
+
+    for await (const chunk of streamResult) {
+      const chunkText = chunk.text;
+      if (chunkText) {
+        sendEvent("chunk", { text: chunkText });
+      }
+    }
+    sendEvent("done", { source: "gemini-flash" });
+  } catch (err: any) {
+    console.error("Coach stream error, sending local fallback:", err);
+    const fallbackResponse = generateLocalCoachAdvice(userPrompt || "orientação", runnerState);
+    sendEvent("chunk", { text: fallbackResponse });
+    sendEvent("done", { source: "local-expert-fallback", error: err?.message });
+  } finally {
+    res.end();
   }
 });
 
