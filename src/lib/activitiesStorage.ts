@@ -364,11 +364,19 @@ export async function simulateGoogleFitSync(
           const isWalk = sess.activityType === 7 || (sess.name && sess.name.toLowerCase().includes('walk'));
           const type = isRun ? 'run' : isWalk ? 'walk' : 'run';
           
-          // Estimate distance based on typical pace if not provided
-          const estSpeedKmh = isRun ? 11.5 : 5.4;
-          const distanceKm = Math.round((estSpeedKmh * (durationSeconds / 3600)) * 100) / 100;
-          const distanceMeters = Math.round(distanceKm * 1000);
-          const paceSec = Math.round(durationSeconds / distanceKm);
+          // Use exact distance if available from Google Fit datasets, otherwise estimate
+          let distanceMeters = sess.exactDistanceMeters || 0;
+          let distanceKm = 0;
+          if (distanceMeters > 500) {
+            distanceKm = Math.round((distanceMeters / 1000) * 100) / 100;
+          } else {
+            const estSpeedKmh = isRun ? 11.5 : 5.4;
+            distanceKm = Math.round((estSpeedKmh * (durationSeconds / 3600)) * 100) / 100;
+            distanceMeters = Math.round(distanceKm * 1000);
+          }
+
+          const paceSec = distanceKm > 0 ? Math.round(durationSeconds / distanceKm) : 360;
+          const avgHr = sess.avgHeartRate;
           
           const appName = sess.application?.packageName?.includes('huami') 
             ? 'Amazfit (Zepp)' 
@@ -377,6 +385,10 @@ export async function simulateGoogleFitSync(
           const title = sess.name === 'Walk' ? 'Caminhada • Amazfit'
             : sess.name === 'Outros' ? 'Treino Físico • Amazfit'
             : sess.name || (isRun ? 'Corrida Google Fit' : isWalk ? 'Caminhada Google Fit' : 'Atividade Google Fit');
+
+          const route = Array.isArray(sess.routePoints) && sess.routePoints.length >= 2 
+            ? sess.routePoints 
+            : undefined;
 
           return {
             id: `gfit-${sess.id || startMs}`,
@@ -391,10 +403,12 @@ export async function simulateGoogleFitSync(
             durationFormatted: formatTime(durationSeconds),
             paceSecondsPerKm: paceSec,
             paceFormatted: formatPace(paceSec),
-            speedAvgKmh: estSpeedKmh,
-            speedMaxKmh: Math.round(estSpeedKmh * 1.18 * 10) / 10,
-            vdot: isRun ? Math.round(calculateVDOT(distanceMeters, durationSeconds) * 10) / 10 : undefined,
-            notes: `Importado de ${appName} via Google Fitness REST API.`,
+            speedAvgKmh: Math.round((distanceKm / (durationSeconds / 3600)) * 10) / 10,
+            speedMaxKmh: Math.round((distanceKm / (durationSeconds / 3600)) * 1.18 * 10) / 10,
+            avgHr,
+            route,
+            vdot: isRun && distanceMeters >= 1500 ? Math.round(calculateVDOT(distanceMeters, durationSeconds) * 10) / 10 : undefined,
+            notes: `Importado de ${appName} via Google Fitness REST API.` + (route ? ` Rota com ${route.length} coordenadas GPS.` : ''),
             syncId: sess.id,
             syncedAt: new Date().toISOString()
           } as UserActivity;

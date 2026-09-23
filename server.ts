@@ -428,9 +428,108 @@ app.get("/api/fitness/activities", async (req, res) => {
     }
 
     const fitData = await fitResponse.json();
+    const rawSessions = fitData.session || [];
+
+    // Enrich top recent sessions with location (GPS) and distance datasets
+    const enrichedSessions = await Promise.all(
+      rawSessions.slice(0, 10).map(async (sess: any) => {
+        try {
+          const startNano = `${sess.startTimeMillis}000000`;
+          const endNano = `${sess.endTimeMillis}000000`;
+
+          // Query GPS Location sample dataset
+          const locUrl = `https://fitness.googleapis.com/fitness/v1/users/me/dataSources/derived:com.google.location.sample:com.google.android.gms:merge_location_samples/datasets/${startNano}-${endNano}`;
+          const locRes = await fetch(locUrl, {
+            headers: { Authorization: `Bearer ${athleteGoogleTokens.access_token}` }
+          });
+
+          let routePoints: Array<{ lat: number; lng: number; ele?: number; time?: string; speed?: number }> = [];
+
+          if (locRes.ok) {
+            const locData = await locRes.json();
+            if (Array.isArray(locData.point)) {
+              routePoints = locData.point
+                .map((pt: any) => {
+                  const latVal = pt.value?.[0]?.fpVal;
+                  const lngVal = pt.value?.[1]?.fpVal;
+                  const eleVal = pt.value?.[3]?.fpVal;
+                  const timeMs = Math.round(parseInt(pt.startTimeNanos || "0", 10) / 1000000);
+                  if (typeof latVal === "number" && typeof lngVal === "number") {
+                    return {
+                      lat: latVal,
+                      lng: lngVal,
+                      ele: typeof eleVal === "number" ? Math.round(eleVal) : undefined,
+                      time: timeMs > 0 ? new Date(timeMs).toISOString() : undefined,
+                    };
+                  }
+                  return null;
+                })
+                .filter(Boolean);
+            }
+          }
+
+          // Query Distance Delta dataset for exact GPS distance
+          let exactDistanceMeters = 0;
+          try {
+            const distUrl = `https://fitness.googleapis.com/fitness/v1/users/me/dataSources/derived:com.google.distance.delta:com.google.android.gms:merge_distance_deltas/datasets/${startNano}-${endNano}`;
+            const distRes = await fetch(distUrl, {
+              headers: { Authorization: `Bearer ${athleteGoogleTokens.access_token}` }
+            });
+            if (distRes.ok) {
+              const distData = await distRes.json();
+              if (Array.isArray(distData.point)) {
+                distData.point.forEach((pt: any) => {
+                  const d = pt.value?.[0]?.fpVal;
+                  if (typeof d === "number") exactDistanceMeters += d;
+                });
+              }
+            }
+          } catch {
+            // distance fallback
+          }
+
+          // Query Heart Rate dataset
+          let avgHeartRate: number | undefined;
+          try {
+            const hrUrl = `https://fitness.googleapis.com/fitness/v1/users/me/dataSources/derived:com.google.heart_rate.bpm:com.google.android.gms:merge_heart_rate_bpm/datasets/${startNano}-${endNano}`;
+            const hrRes = await fetch(hrUrl, {
+              headers: { Authorization: `Bearer ${athleteGoogleTokens.access_token}` }
+            });
+            if (hrRes.ok) {
+              const hrData = await hrRes.json();
+              if (Array.isArray(hrData.point) && hrData.point.length > 0) {
+                let sumHr = 0;
+                let countHr = 0;
+                hrData.point.forEach((pt: any) => {
+                  const h = pt.value?.[0]?.fpVal;
+                  if (typeof h === "number" && h > 40 && h < 240) {
+                    sumHr += h;
+                    countHr++;
+                  }
+                });
+                if (countHr > 0) avgHeartRate = Math.round(sumHr / countHr);
+              }
+            }
+          } catch {
+            // hr fallback
+          }
+
+          return {
+            ...sess,
+            routePoints,
+            exactDistanceMeters: exactDistanceMeters > 0 ? Math.round(exactDistanceMeters) : undefined,
+            avgHeartRate
+          };
+        } catch (enrichErr) {
+          console.warn(`Failed to enrich session ${sess.id}:`, enrichErr);
+          return sess;
+        }
+      })
+    );
+
     return res.json({
       success: true,
-      sessions: fitData.session || [],
+      sessions: enrichedSessions,
       email: athleteGoogleTokens.email
     });
   } catch (error: any) {
