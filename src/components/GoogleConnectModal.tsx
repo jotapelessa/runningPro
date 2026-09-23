@@ -32,7 +32,9 @@ export const GoogleConnectModal: React.FC<GoogleConnectModalProps> = ({
   if (!isOpen) return null;
 
   const [emailInput, setEmailInput] = useState(syncState.userEmail || '');
-  const [clientIdInput, setClientIdInput] = useState(syncState.clientId || '');
+  const [clientIdInput, setClientIdInput] = useState(
+    syncState.clientId || '410928349212-b05lupvu93pgiroqkgmssob3ahhscjqe.apps.googleusercontent.com'
+  );
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -100,8 +102,8 @@ export const GoogleConnectModal: React.FC<GoogleConnectModalProps> = ({
     setIsAuthenticating(true);
     setStatusMessage(null);
 
-    // If user provided a Client ID or uses standard Google Cloud Client ID
-    const effectiveClientId = clientIdInput.trim() || '1047192849202-pacelab-vdot.apps.googleusercontent.com';
+    // Official Google Cloud Client ID for pacelab-vdot
+    const effectiveClientId = clientIdInput.trim() || '410928349212-b05lupvu93pgiroqkgmssob3ahhscjqe.apps.googleusercontent.com';
 
     // Google Fitness & Profile OAuth Scopes
     const scopes = [
@@ -375,25 +377,21 @@ export const GoogleConnectModal: React.FC<GoogleConnectModalProps> = ({
                   </label>
                   <input
                     type="text"
-                    placeholder="ex: 123456789-xyz.apps.googleusercontent.com"
+                    placeholder="410928349212-b05lupvu93pgiroqkgmssob3ahhscjqe.apps.googleusercontent.com"
                     value={clientIdInput}
                     onChange={(e) => setClientIdInput(e.target.value)}
                     className="w-full bg-[#121214] border border-white/10 rounded-xl px-3 py-2 text-xs font-mono-data text-white placeholder-slate-600 focus:outline-none focus:border-blue-500"
                   />
                   <p className="text-[10px] text-slate-500">
-                    Origem JavaScript autorizada: <code>{typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3005'}</code>
+                    Origem JavaScript autorizada no Google Cloud: <code>{typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3005'}</code>
                   </p>
                 </div>
 
                 <button
                   type="button"
                   onClick={handleStartGoogleOAuth}
-                  disabled={isAuthenticating || !clientIdInput.trim()}
-                  className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs font-heading flex items-center justify-center gap-2.5 transition-all ${
-                    !clientIdInput.trim()
-                      ? 'bg-white/5 text-slate-500 border border-white/5 cursor-not-allowed'
-                      : 'bg-white hover:bg-slate-100 text-slate-900 shadow-md cursor-pointer'
-                  }`}
+                  disabled={isAuthenticating}
+                  className="w-full py-2.5 px-4 rounded-xl font-bold text-xs font-heading flex items-center justify-center gap-2.5 transition-all bg-white hover:bg-slate-100 text-slate-900 shadow-md cursor-pointer hover:scale-[1.01]"
                 >
                   <svg className="w-4 h-4" viewBox="0 0 24 24">
                     <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
