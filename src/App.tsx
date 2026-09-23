@@ -14,6 +14,7 @@ import {
 } from './lib/storage';
 import { loadUserActivities, saveUserActivities, deduplicateOrMergeActivity } from './lib/activitiesStorage';
 import { generateEightWeekPlan } from './lib/planGenerator';
+import { reconcilePlanWithActivities, calibrateRunnerFromActivities } from './lib/planReconciler';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { ActivitiesTab } from './components/ActivitiesTab';
@@ -73,6 +74,31 @@ export default function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
+  // Reconcile plan and calibrate on initial startup if activities exist
+  React.useEffect(() => {
+    if (activities && activities.length > 0) {
+      setRunnerState(prev => {
+        const calib = calibrateRunnerFromActivities(prev, activities);
+        if (calib.calibrated) {
+          const next = { ...prev, ...calib.updatedRunnerState };
+          saveRunnerState(next);
+          return next;
+        }
+        return prev;
+      });
+
+      setPlan(prevPlan => {
+        if (!prevPlan || !prevPlan.weeks) return prevPlan;
+        const rec = reconcilePlanWithActivities(prevPlan, activities);
+        if (rec.matchedCount > 0) {
+          saveTrainingPlan(rec.updatedPlan);
+          return rec.updatedPlan;
+        }
+        return prevPlan;
+      });
+    }
+  }, []);
+
   // Sync to local storage
   const handleUpdateRunnerState = (updatedFields: Partial<RunnerState>) => {
     setRunnerState(prev => {
@@ -124,6 +150,28 @@ export default function App() {
   const handleUpdateActivities = (newActivities: UserActivity[]) => {
     setActivities(newActivities);
     saveUserActivities(newActivities);
+
+    // 1. Calibração adaptativa dos dados do atleta a partir das atividades reais
+    setRunnerState(prev => {
+      const calib = calibrateRunnerFromActivities(prev, newActivities);
+      if (calib.calibrated) {
+        const nextState = { ...prev, ...calib.updatedRunnerState };
+        saveRunnerState(nextState);
+        return nextState;
+      }
+      return prev;
+    });
+
+    // 2. Reconciliação e ajuste dinâmico do calendário/planilha
+    setPlan(prevPlan => {
+      if (!prevPlan || !prevPlan.weeks) return prevPlan;
+      const rec = reconcilePlanWithActivities(prevPlan, newActivities);
+      if (rec.matchedCount > 0 || rec.overloadDetected) {
+        saveTrainingPlan(rec.updatedPlan);
+        return rec.updatedPlan;
+      }
+      return prevPlan;
+    });
   };
 
   // Reset entire application data
