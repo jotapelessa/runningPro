@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Activity as ActivityIcon, 
   Plus, 
@@ -57,6 +57,26 @@ export const ActivitiesTab: React.FC<ActivitiesTabProps> = ({
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [isGoogleModalOpen, setIsGoogleModalOpen] = useState<boolean>(false);
   const [syncFeedback, setSyncFeedback] = useState<{ message: string; type: 'success' | 'info' } | null>(null);
+
+  // Auto-sync on component mount if backend has active Google session
+  useEffect(() => {
+    let isMounted = true;
+    async function checkAndAutoSync() {
+      try {
+        const res = await fetch('/api/fitness/activities');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.sessions) && data.sessions.length > 0 && isMounted) {
+            handleSyncGoogle();
+          }
+        }
+      } catch (e) {
+        // silent check
+      }
+    }
+    checkAndAutoSync();
+    return () => { isMounted = false; };
+  }, []);
 
   // Filters State
   const [filters, setFilters] = useState<ActivityFilter>({

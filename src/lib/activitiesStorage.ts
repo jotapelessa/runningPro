@@ -361,7 +361,7 @@ export async function simulateGoogleFitSync(
           const endMs = parseInt(sess.endTimeMillis, 10) || startMs + 1800000;
           const durationSeconds = Math.max(60, Math.round((endMs - startMs) / 1000));
           const isRun = sess.activityType === 8;
-          const isWalk = sess.activityType === 7;
+          const isWalk = sess.activityType === 7 || (sess.name && sess.name.toLowerCase().includes('walk'));
           const type = isRun ? 'run' : isWalk ? 'walk' : 'run';
           
           // Estimate distance based on typical pace if not provided
@@ -374,9 +374,13 @@ export async function simulateGoogleFitSync(
             ? 'Amazfit (Zepp)' 
             : 'Google Fit';
 
+          const title = sess.name === 'Walk' ? 'Caminhada • Amazfit'
+            : sess.name === 'Outros' ? 'Treino Físico • Amazfit'
+            : sess.name || (isRun ? 'Corrida Google Fit' : isWalk ? 'Caminhada Google Fit' : 'Atividade Google Fit');
+
           return {
             id: `gfit-${sess.id || startMs}`,
-            title: sess.name || (isRun ? 'Corrida Google Fit' : isWalk ? 'Caminhada Google Fit' : 'Atividade Google Fit'),
+            title,
             type,
             source: 'google_fit',
             sourceLabel: `${appName} • Google Fit API`,
