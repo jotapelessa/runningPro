@@ -30,10 +30,13 @@ function getGeminiClient(): GoogleGenAI | null {
 
 // 1. Health check endpoint
 app.get("/api/health", (req, res) => {
+  const tokenFileExists = fs.existsSync("/data/google_tokens.json") || fs.existsSync(path.join(process.cwd(), "google_tokens.json"));
   res.json({
     status: "ok",
-    app: "PaceLab VDOT v3.5",
+    app: "PaceLab VDOT v3.6",
     aiEnabled: Boolean(process.env.GEMINI_API_KEY),
+    googleFitAuth: tokenFileExists,
+    memoryUsageMb: Math.round(process.memoryUsage().rss / (1024 * 1024)),
     time: new Date().toISOString(),
   });
 });

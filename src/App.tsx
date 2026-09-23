@@ -31,6 +31,7 @@ import { CadenceMetronomeModal } from './components/CadenceMetronomeModal';
 import { WristbandModal } from './components/WristbandModal';
 import { ResetConfirmModal } from './components/ResetConfirmModal';
 import { PhysiologicalDiagnosisModal } from './components/PhysiologicalDiagnosisModal';
+import { getTabFromPathname, syncPathWithTab } from './lib/router';
 import { Zap, Heart, ShieldCheck, Flame } from 'lucide-react';
 
 export default function App() {
@@ -40,20 +41,37 @@ export default function App() {
   const [recoveryLogs, setRecoveryLogs] = useState<DailyRecoveryCheckin[]>(() => loadRecoveryLogs());
   const [activities, setActivities] = useState<UserActivity[]>(() => loadUserActivities());
 
-  const [activeTab, setActiveTab] = useState<AppTab>(() => {
-    const isUncalibrated = runnerState.isCalibrated === false || (runnerState.currentVdot || 0) <= 0;
-    return isUncalibrated ? 'atividades' : 'atividades';
-  });
+  const initialRoute = getTabFromPathname();
+  const [activeTab, setActiveTabState] = useState<AppTab>(() => initialRoute.tab);
 
   // Modals
-  const [isAthleteModalOpen, setIsAthleteModalOpen] = useState<boolean>(false);
+  const [isAthleteModalOpen, setIsAthleteModalOpen] = useState<boolean>(() => initialRoute.openModal === 'atleta');
   const [isPaceModalOpen, setIsPaceModalOpen] = useState<boolean>(false);
-  const [isMetronomeModalOpen, setIsMetronomeModalOpen] = useState<boolean>(false);
+  const [isMetronomeModalOpen, setIsMetronomeModalOpen] = useState<boolean>(() => initialRoute.openModal === 'metronomo');
   const [isWristbandModalOpen, setIsWristbandModalOpen] = useState<boolean>(false);
   const [isResetModalOpen, setIsResetModalOpen] = useState<boolean>(false);
   const [isDiagnosisModalOpen, setIsDiagnosisModalOpen] = useState<boolean>(false);
   const [diagnosedWorkout, setDiagnosedWorkout] = useState<ParsedWorkout | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
+
+  // Synchronized activeTab setter that keeps browser URL in sync
+  const setActiveTab = (tab: AppTab) => {
+    setActiveTabState(tab);
+    syncPathWithTab(tab);
+  };
+
+  // Listen to browser Back/Forward (popstate)
+  React.useEffect(() => {
+    const handlePopState = () => {
+      const current = getTabFromPathname();
+      setActiveTabState(current.tab);
+      if (current.openModal === 'metronomo') setIsMetronomeModalOpen(true);
+      if (current.openModal === 'atleta') setIsAthleteModalOpen(true);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // Sync to local storage
   const handleUpdateRunnerState = (updatedFields: Partial<RunnerState>) => {

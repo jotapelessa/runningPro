@@ -14,6 +14,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { RunnerState, AppTab } from '../types';
+import { TAB_ROUTE_MAP } from '../lib/router';
 
 interface SidebarProps {
   activeTab: AppTab;
@@ -138,11 +139,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
           return (
-            <button
+            <a
               key={tab.id}
               id={`sidebar-tab-${tab.id}`}
-              onClick={() => handleTabClick(tab.id)}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all group cursor-pointer text-left ${
+              href={TAB_ROUTE_MAP[tab.id]}
+              onClick={(e) => {
+                e.preventDefault();
+                handleTabClick(tab.id);
+              }}
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all group cursor-pointer text-left block ${
                 isActive
                   ? 'bg-gradient-to-r from-[#FF4E00]/20 to-[#FF4E00]/5 text-white font-semibold border-l-2 border-[#FF4E00] shadow-sm shadow-[#FF4E00]/10'
                   : 'text-slate-400 hover:text-slate-100 hover:bg-white/5 border-l-2 border-transparent'
@@ -166,7 +171,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               ) : (
                 <ChevronRight className="w-3 h-3 text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
               )}
-            </button>
+            </a>
           );
         })}
       </div>

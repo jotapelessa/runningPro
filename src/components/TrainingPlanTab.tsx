@@ -22,6 +22,7 @@ import { DailyWorkout, TrainingPlan, TrainingWeek, RunnerState, ParsedWorkout, U
 import { generateEightWeekPlan } from '../lib/planGenerator';
 import { generateRunWalkPlan, RUN_WALK_SCHEDULE } from '../lib/runWalkEngine';
 import { parseUniversalWorkoutFile } from '../lib/workoutParser';
+import { reconcilePlanWithActivities } from '../lib/planReconciler';
 import { LiveRunWalkModal } from './LiveRunWalkModal';
 import { AdaptationCalendar } from './AdaptationCalendar';
 
@@ -131,6 +132,32 @@ export const TrainingPlanTab: React.FC<TrainingPlanTabProps> = ({
       spread: 60,
       origin: { y: 0.6 }
     });
+  };
+
+  const [reconcileNotice, setReconcileNotice] = useState<string | null>(null);
+
+  // Reconcile Plan with Google Fit & Wearable Activities
+  const handleReconcileActivities = () => {
+    if (!activities || activities.length === 0) {
+      setReconcileNotice('Nenhuma atividade recente sincronizada do Google Fit ou relógio encontrada.');
+      setTimeout(() => setReconcileNotice(null), 4000);
+      return;
+    }
+
+    const result = reconcilePlanWithActivities(currentPlan, activities);
+    onUpdatePlan(result.updatedPlan);
+
+    if (result.matchedCount > 0) {
+      confetti({ particleCount: 50, spread: 50, origin: { y: 0.6 } });
+      setReconcileNotice(
+        `✓ ${result.matchedCount} treino(s) do Google Fit/Relógio sincronizados e confirmados na planilha!` +
+        (result.overloadDetected ? ` Atenção: ${result.overloadNotes[0]}` : '')
+      );
+    } else {
+      setReconcileNotice('As atividades sincronizadas já foram atribuídas ou não possuem datas compatíveis.');
+    }
+
+    setTimeout(() => setReconcileNotice(null), 6000);
   };
 
   const handleLiveSessionComplete = (summary: {
@@ -483,6 +510,16 @@ export const TrainingPlanTab: React.FC<TrainingPlanTabProps> = ({
             </div>
 
             <button
+              id="btn-reconcile-google-fit"
+              onClick={handleReconcileActivities}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 font-bold text-xs font-mono-data uppercase transition-all shadow-md cursor-pointer"
+              title="Sincronizar e dar baixa automática nos treinos do plano usando atividades do Google Fit ou arquivos importados"
+            >
+              <Activity className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Sincronizar Google Fit</span>
+            </button>
+
+            <button
               id="btn-regenerate-plan"
               onClick={handleRegeneratePlan}
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#FF4E00] hover:bg-[#E03E00] text-white font-bold text-xs font-mono-data uppercase transition-all shadow-md shadow-[#FF4E00]/25 cursor-pointer"
@@ -492,6 +529,14 @@ export const TrainingPlanTab: React.FC<TrainingPlanTabProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Reconcile notice banner */}
+        {reconcileNotice && (
+          <div className="p-3 bg-emerald-950/40 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs flex items-center gap-2 animate-fadeIn">
+            <Sparkles className="w-4 h-4 flex-shrink-0 text-emerald-400" />
+            <span>{reconcileNotice}</span>
+          </div>
+        )}
 
         {/* Custom Days of Week Selector Bar inside Spreadsheet View */}
         {isTransitionUser && (
