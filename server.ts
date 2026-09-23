@@ -132,7 +132,11 @@ const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
 
 // Store athlete's Google tokens in persistent JSON file on disk
-const TOKENS_FILE = path.join(__dirname, '.google_tokens.json');
+const DATA_DIR = path.join(process.cwd(), 'data');
+if (!fs.existsSync(DATA_DIR)) {
+  try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) {}
+}
+const TOKENS_FILE = path.join(DATA_DIR, 'google_tokens.json');
 let athleteGoogleTokens: { access_token?: string; refresh_token?: string; expiry_date?: number; email?: string } = {};
 
 try {
