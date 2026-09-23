@@ -116,10 +116,9 @@ export const GoogleConnectModal: React.FC<GoogleConnectModalProps> = ({
 
     const redirectUri = window.location.origin + window.location.pathname;
 
-    // Use Google Identity Services OAuth 2.0 Token Client if available in window, or launch OAuth URL
-    if ((window as any).google?.accounts?.oauth2) {
+    const launchTokenClient = (gClient: any) => {
       try {
-        const client = (window as any).google.accounts.oauth2.initTokenClient({
+        const client = gClient.initTokenClient({
           client_id: effectiveClientId,
           scope: scopes,
           callback: (response: any) => {
@@ -135,34 +134,36 @@ export const GoogleConnectModal: React.FC<GoogleConnectModalProps> = ({
           },
         });
         client.requestAccessToken();
-        return;
-      } catch (e) {
-        console.warn('Google Identity Services client fallback:', e);
+      } catch (err: any) {
+        setStatusMessage({ text: `Falha ao iniciar cliente Google: ${err.message}`, type: 'error' });
+        setIsAuthenticating(false);
       }
+    };
+
+    // Check if Google Identity Services (GIS) is ready
+    if ((window as any).google?.accounts?.oauth2) {
+      launchTokenClient((window as any).google.accounts.oauth2);
+      return;
     }
 
-    // Direct Google OAuth URL authorization flow
-    const oauthUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-      `client_id=${encodeURIComponent(effectiveClientId)}` +
-      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-      `&response_type=token` +
-      `&scope=${encodeURIComponent(scopes)}` +
-      `&include_granted_scopes=true` +
-      `&prompt=consent`;
-
-    // Try opening popup
-    const popup = window.open(oauthUrl, 'GoogleAuth', 'width=520,height=640,status=no,toolbar=no');
-    
-    if (!popup || popup.closed || typeof popup.closed === 'undefined') {
-      window.location.href = oauthUrl;
-    } else {
-      const checkPopup = setInterval(() => {
-        if (!popup || popup.closed) {
-          clearInterval(checkPopup);
-          setIsAuthenticating(false);
-        }
-      }, 1000);
-    }
+    // If script not loaded yet, inject GIS dynamically
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.onload = () => {
+      if ((window as any).google?.accounts?.oauth2) {
+        launchTokenClient((window as any).google.accounts.oauth2);
+      } else {
+        setStatusMessage({ text: 'Não foi possível carregar a biblioteca Google Identity.', type: 'error' });
+        setIsAuthenticating(false);
+      }
+    };
+    script.onerror = () => {
+      setStatusMessage({ text: 'Erro ao carregar script do Google. Verifique sua conexão.', type: 'error' });
+      setIsAuthenticating(false);
+    };
+    document.body.appendChild(script);
   };
 
   // Quick Direct Connect by Email (stores user account profile locally and enables Google API sync)
