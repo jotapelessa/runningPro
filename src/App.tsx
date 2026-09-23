@@ -184,6 +184,8 @@ export default function App() {
       elevationGainMeters: workout.elevationGainMeters,
       cadenceSpm: workout.avgCadence || undefined,
       vdot: workout.vdot,
+      splits: workout.splits,
+      cardiacDriftPct: workout.cardiacDriftPct,
       notes: `Arquivo ${workout.fileName} processado com telemetria completa.`,
       route: (workout as any).routePoints || (workout as any).route || []
     };

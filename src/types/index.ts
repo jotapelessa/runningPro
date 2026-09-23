@@ -345,6 +345,9 @@ export interface ParsedWorkout {
   avgCadence?: number | null;
   elevationGainMeters: number;
   vdot: number;
+  splits?: Array<{ km: number; paceFormatted: string; paceSeconds: number; avgHr?: number; elevationDiffM?: number; durationSeconds: number }>;
+  routePoints?: Array<{ lat: number; lng: number; ele?: number; time?: string; hr?: number; speed?: number }>;
+  cardiacDriftPct?: number;
 }
 
 export interface MultiWorkoutTelemetrySummary {

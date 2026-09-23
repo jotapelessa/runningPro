@@ -1,7 +1,74 @@
 import { ParsedWorkout, MultiWorkoutTelemetrySummary } from '../types';
-import { calculateVDOT, formatPace, formatTime } from './vdotCalculator';
+import { calculateVDOT, formatPace, formatTime, calculateCardiacDrift } from './vdotCalculator';
 // @ts-ignore
 import FitParser from 'fit-file-parser';
+
+/**
+ * Generates kilometer splits from chronological trackpoints
+ */
+export function generateKmSplits(
+  points: Array<{ lat?: number; lng?: number; time?: string; hr?: number; ele?: number; distanceFromStartM?: number }>
+): Array<{ km: number; paceFormatted: string; paceSeconds: number; avgHr?: number; elevationDiffM?: number; durationSeconds: number }> {
+  if (!points || points.length < 2) return [];
+
+  const splits: Array<{ km: number; paceFormatted: string; paceSeconds: number; avgHr?: number; elevationDiffM?: number; durationSeconds: number }> = [];
+  let currentKm = 1;
+  let kmStartDist = 0;
+  let kmStartTime = points[0].time ? new Date(points[0].time).getTime() : 0;
+  let accumulatedDist = 0;
+  let hrSum = 0;
+  let hrCount = 0;
+  let startEle = points[0].ele ?? 0;
+  let endEle = points[0].ele ?? 0;
+
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1];
+    const curr = points[i];
+
+    let stepDist = 0;
+    if (curr.distanceFromStartM !== undefined && prev.distanceFromStartM !== undefined) {
+      stepDist = Math.max(0, curr.distanceFromStartM - prev.distanceFromStartM);
+    } else if (curr.lat && curr.lng && prev.lat && prev.lng) {
+      stepDist = haversineDistance(prev.lat, prev.lng, curr.lat, curr.lng);
+    }
+    accumulatedDist += stepDist;
+
+    if (curr.hr) {
+      hrSum += curr.hr;
+      hrCount++;
+    }
+    if (curr.ele !== undefined) {
+      endEle = curr.ele;
+    }
+
+    if (accumulatedDist >= currentKm * 1000) {
+      const currTime = curr.time ? new Date(curr.time).getTime() : 0;
+      let durationSec = kmStartTime && currTime > kmStartTime ? Math.round((currTime - kmStartTime) / 1000) : 300;
+      if (durationSec <= 0 || durationSec > 1800) durationSec = 300;
+
+      const avgHr = hrCount > 0 ? Math.round(hrSum / hrCount) : undefined;
+      const eleDiff = Math.round(endEle - startEle);
+
+      splits.push({
+        km: currentKm,
+        paceFormatted: formatPace(durationSec),
+        paceSeconds: durationSec,
+        avgHr,
+        elevationDiffM: eleDiff,
+        durationSeconds: durationSec
+      });
+
+      currentKm++;
+      kmStartDist = accumulatedDist;
+      kmStartTime = currTime;
+      hrSum = 0;
+      hrCount = 0;
+      startEle = endEle;
+    }
+  }
+
+  return splits;
+}
 
 /**
  * Haversine formula for calculating GPS distances between coordinate points in meters
@@ -283,6 +350,9 @@ export function parseGpxDetails(content: string, fileName: string): ParsedGpxDet
     }
   }
 
+  const splits = generateKmSplits(rawPoints);
+  const cardiacDriftPct = calculateCardiacDrift(splits);
+
   return {
     name: activityName,
     date: workoutDate,
@@ -304,6 +374,8 @@ export function parseGpxDetails(content: string, fileName: string): ParsedGpxDet
     calories: Math.round(calories),
     activityType: detectedType,
     routePoints: sampledRoute,
+    splits,
+    cardiacDriftPct,
     vdot
   };
 }
@@ -350,6 +422,7 @@ export function parseTcxContent(content: string, fileName: string): ParsedWorkou
   let elevationGainMeters = 0;
   let prevAltitude: number | null = null;
   let calculatedDistFromPoints = 0;
+  const tcxPoints: Array<{ lat: number; lng: number; ele?: number; time?: string; hr?: number }> = [];
 
   for (let i = 0; i < trackpoints.length; i++) {
     const pt = trackpoints[i];
@@ -389,11 +462,25 @@ export function parseTcxContent(content: string, fileName: string): ParsedWorkou
       }
     }
 
+    const lat = parseFloat(pt.querySelector('Position > LatitudeDegrees')?.textContent || '0');
+    const lon = parseFloat(pt.querySelector('Position > LongitudeDegrees')?.textContent || '0');
+    const timeIso = pt.querySelector('Time')?.textContent || undefined;
+
+    if (lat !== 0 && lon !== 0) {
+      tcxPoints.push({
+        lat,
+        lng: lon,
+        ele: altNode ? parseFloat(altNode.textContent || '0') : undefined,
+        time: timeIso,
+        hr: hrNode ? parseInt(hrNode.textContent || '0', 10) : undefined,
+      });
+    }
+
     // GPS distance if totalDistanceMeters was 0
     if (totalDistanceMeters === 0 && i > 0) {
       const prevPt = trackpoints[i - 1];
-      const lat1 = parseFloat(pt.querySelector('Position > LatitudeDegrees')?.textContent || '0');
-      const lon1 = parseFloat(pt.querySelector('Position > LongitudeDegrees')?.textContent || '0');
+      const lat1 = lat;
+      const lon1 = lon;
       const lat2 = parseFloat(prevPt.querySelector('Position > LatitudeDegrees')?.textContent || '0');
       const lon2 = parseFloat(prevPt.querySelector('Position > LongitudeDegrees')?.textContent || '0');
 
@@ -433,6 +520,9 @@ export function parseTcxContent(content: string, fileName: string): ParsedWorkou
   const idNode = xmlDoc.querySelector('Activity > Id, Trackpoint > Time');
   const workoutDate = idNode?.textContent ? new Date(idNode.textContent).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
 
+  const splits = generateKmSplits(tcxPoints);
+  const cardiacDriftPct = calculateCardiacDrift(splits);
+
   return {
     name: `Corrida TCX (${distanceKm.toFixed(1)}k)`,
     date: workoutDate,
@@ -447,6 +537,9 @@ export function parseTcxContent(content: string, fileName: string): ParsedWorkou
     maxHR: maxHrFound > 0 ? maxHrFound : null,
     avgCadence: cadCount > 0 ? Math.round(cadSum / cadCount) : null,
     elevationGainMeters: Math.round(elevationGainMeters),
+    routePoints: tcxPoints.length > 0 ? tcxPoints : undefined,
+    splits,
+    cardiacDriftPct,
     vdot
   };
 }
@@ -561,6 +654,27 @@ export function parseFitBuffer(buffer: ArrayBuffer, fileName: string): Promise<P
           return reject(new Error('A distância detectada no arquivo .FIT é inferior a 100 metros.'));
         }
 
+        // Build routePoints and splits from FIT records
+        const fitPoints: Array<{ lat: number; lng: number; ele?: number; time?: string; hr?: number; speed?: number; distanceFromStartM?: number }> = [];
+        if (data.records && Array.isArray(data.records)) {
+          data.records.forEach((r: any) => {
+            if (r.position_lat !== undefined && r.position_long !== undefined) {
+              fitPoints.push({
+                lat: r.position_lat,
+                lng: r.position_long,
+                ele: r.altitude,
+                time: r.timestamp ? new Date(r.timestamp).toISOString() : undefined,
+                hr: r.heart_rate,
+                speed: r.speed,
+                distanceFromStartM: r.distance
+              });
+            }
+          });
+        }
+
+        const splits = generateKmSplits(fitPoints);
+        const cardiacDriftPct = calculateCardiacDrift(splits);
+
         const distanceKm = totalDistanceMeters / 1000;
         const paceSecondsPerKm = totalDurationSeconds > 0 ? Math.round(totalDurationSeconds / distanceKm) : 300;
         const vdot = calculateVDOT(totalDistanceMeters, totalDurationSeconds);
@@ -579,6 +693,9 @@ export function parseFitBuffer(buffer: ArrayBuffer, fileName: string): Promise<P
           maxHR,
           avgCadence,
           elevationGainMeters,
+          routePoints: fitPoints.length > 0 ? fitPoints : undefined,
+          splits,
+          cardiacDriftPct,
           vdot
         });
       });
