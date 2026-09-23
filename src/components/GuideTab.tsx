@@ -71,6 +71,10 @@ export const GuideTab: React.FC<GuideTabProps> = ({ onOpenAthleteModal, onNaviga
 
   const faqs = [
     {
+      q: 'Como funciona a fase de Adaptação Musculoesquelética (Caminha-Corre / Run-Walk)?',
+      a: 'Para iniciantes, pessoas retornando de sedentarismo ou com sobrepeso, submeter o corpo diretamente a corridas contínuas gera um impacto repetitivo de até 3x o peso corporal nas articulações, causando canelite e tendinopatias. O método Caminha-Corre prescreve blocos curtos de trote leve (RPE 6/10) intercalados com caminhada rápida de recuperação. Isso fortalece tendões e ossos gradualmente até você atingir 3km contínuos e desbloquear o motor VDOT formal.'
+    },
+    {
       q: 'O que é VDOT e por que ele é mais preciso que apenas o VO2Max?',
       a: 'O VDOT é um índice patenteado pelo lendário fisiologista Dr. Jack Daniels que combina o consumo máximo de oxigênio (VO2Max) com a Economia de Corrida do atleta. Dois corredores com o mesmo VO2Max podem ter desempenhos muito diferentes se um deles gastar menos energia mecânica. O VDOT expressa a sua real velocidade competitiva.'
     },
@@ -88,7 +92,7 @@ export const GuideTab: React.FC<GuideTabProps> = ({ onOpenAthleteModal, onNaviga
     },
     {
       q: 'Como a aplicação ajusta meus treinos se eu registrar alguma dor?',
-      a: 'Na aba "Recuperação Ativa", ao registrar uma dor moderada ou severa (canelite, joelho, tendão de aquiles), o PaceLab automaticamente rebaixa o Readiness Score, gera alertas de segurança, reduz o volume sugerido e desabilita prescrição de tiros até a regressão dos sintomas.'
+      a: 'Na aba "Recuperação Ativa / Proteção Articular", ao registrar uma dor moderada ou severa (canelite, joelho, tendão de aquiles), o PaceLab automaticamente rebaixa o Readiness Score, gera alertas de segurança, reduz o volume sugerido e desabilita prescrição de tiros até a regressão dos sintomas.'
     },
     {
       q: 'Posso exportar minha planilha de 8 semanas para imprimir ou para o relógio?',

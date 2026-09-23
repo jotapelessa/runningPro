@@ -18,6 +18,7 @@ import {
   formatPace, 
   formatTime 
 } from '../lib/vdotCalculator';
+import { TransitionLadderView } from './TransitionLadderView';
 
 interface RacePredictionsTabProps {
   runnerState: RunnerState;
@@ -32,7 +33,18 @@ export const RacePredictionsTab: React.FC<RacePredictionsTabProps> = ({
   onOpenWristbandModal,
   onOpenAthleteModal
 }) => {
-  const isUncalibrated = runnerState.isCalibrated === false || (runnerState.currentVdot || 0) <= 0;
+  const isTransitionUser = runnerState.level === 'sedentary_transition' || runnerState.activityProfile === 'sedentary';
+  const isUncalibrated = !isTransitionUser && (runnerState.isCalibrated === false || (runnerState.currentVdot || 0) <= 0);
+
+  if (isTransitionUser) {
+    return (
+      <TransitionLadderView
+        runnerState={runnerState}
+        onUpdateRunnerState={onUpdateRunnerState}
+        onOpenAthleteModal={onOpenAthleteModal}
+      />
+    );
+  }
 
   const [selectedRace, setSelectedRace] = useState<DistanceType>('half_marathon');
   const [strategy, setStrategy] = useState<'negative' | 'even' | 'conservative' | 'positive'>('negative');

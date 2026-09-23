@@ -20,6 +20,7 @@ import { DailyWorkout, TrainingPlan, TrainingWeek, RunnerState } from '../types'
 import { generateEightWeekPlan } from '../lib/planGenerator';
 import { generateRunWalkPlan, RUN_WALK_SCHEDULE } from '../lib/runWalkEngine';
 import { LiveRunWalkModal } from './LiveRunWalkModal';
+import { AdaptationCalendar } from './AdaptationCalendar';
 
 interface TrainingPlanTabProps {
   runnerState: RunnerState;
@@ -40,6 +41,8 @@ export const TrainingPlanTab: React.FC<TrainingPlanTabProps> = ({
   const isTransitionUser = runnerState.level === 'sedentary_transition' || runnerState.activityProfile === 'sedentary';
   const isUncalibrated = !isTransitionUser && (runnerState.isCalibrated === false || (runnerState.currentVdot || 0) <= 0);
 
+  // Sub-view mode: 'calendar' (focused for run-walk adaptation) or 'spreadsheet' (8-week matrix)
+  const [subView, setSubView] = useState<'calendar' | 'spreadsheet'>(isTransitionUser ? 'calendar' : 'spreadsheet');
   const [activeWeekNum, setActiveWeekNum] = useState<number>(1);
   const [selectedGoal, setSelectedGoal] = useState<'5k' | '10k' | '21k' | '42k' | 'base'>(currentPlan.targetGoal || '10k');
   const [selectedFreq, setSelectedFreq] = useState<3 | 4 | 5 | 6>(currentPlan.weeklyFrequency || 4);
@@ -305,8 +308,48 @@ export const TrainingPlanTab: React.FC<TrainingPlanTabProps> = ({
         </div>
       )}
 
-      {/* Top Generator / Settings Card */}
-      <div className="telemetry-card rounded-2xl p-5 border border-white/10 space-y-4">
+      {/* View Mode Switcher for Transition Athletes */}
+      {isTransitionUser && (
+        <div className="flex items-center gap-2 p-1.5 bg-[#0D0D10] border border-white/10 rounded-2xl w-fit">
+          <button
+            onClick={() => setSubView('calendar')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold font-heading transition-all cursor-pointer ${
+              subView === 'calendar'
+                ? 'bg-emerald-500 text-black shadow-md shadow-emerald-500/25'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <CalendarCheck className="w-3.5 h-3.5" />
+            Visão Calendário Mensal
+          </button>
+          <button
+            onClick={() => setSubView('spreadsheet')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold font-heading transition-all cursor-pointer ${
+              subView === 'spreadsheet'
+                ? 'bg-emerald-500 text-black shadow-md shadow-emerald-500/25'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            Visão Grade Semanal (4 Semanas)
+          </button>
+        </div>
+      )}
+
+      {/* When Transition User selects Calendar view, render the interactive AdaptationCalendar */}
+      {isTransitionUser && subView === 'calendar' ? (
+        <AdaptationCalendar
+          runnerState={runnerState}
+          onStartLiveSession={(weekNum) => {
+            setActiveWeekNum(weekNum);
+            setIsLiveModalOpen(true);
+          }}
+          onUpdateRunnerState={onUpdateRunnerState}
+        />
+      ) : (
+        <>
+          {/* Top Generator / Settings Card */}
+          <div className="telemetry-card rounded-2xl p-5 border border-white/10 space-y-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -656,6 +699,8 @@ export const TrainingPlanTab: React.FC<TrainingPlanTabProps> = ({
           );
         })}
       </div>
+      </>
+    )}
 
       {/* Live Audio Run-Walk Modal */}
       <LiveRunWalkModal

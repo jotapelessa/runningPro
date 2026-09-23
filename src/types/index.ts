@@ -29,6 +29,11 @@ export interface RunWalkInterval {
  * @description Monitor de prontidão articular e cardiovascular rumo ao teste formal de VDOT.
  * @module runWalkEngine
  */
+/**
+ * @graph-entity VdotReadiness
+ * @description Monitor de prontidão articular e cardiovascular rumo ao teste formal de VDOT.
+ * @module runWalkEngine
+ */
 export interface VdotReadiness {
   currentStage: 'mechanical_adaptation' | 'aerobic_base' | 'vdot_ready';
   stageTitle: string;
@@ -40,6 +45,47 @@ export interface VdotReadiness {
   unlockedVdot: boolean;
   coachRecommendation: string;
 }
+
+/**
+ * @graph-entity CalendarSessionEvent
+ * @description Evento individual no calendário de adaptação musculoesquelética
+ * @module adaptationCalendar
+ */
+export interface CalendarSessionEvent {
+  date: string; // YYYY-MM-DD
+  type: 'RUN_WALK' | 'REST_RECOVERY' | 'MOBILITY' | 'MILESTONE_TEST';
+  title: string;
+  description: string;
+  targetDurationMin: number;
+  runDurationSec?: number;
+  walkDurationSec?: number;
+  reps?: number;
+  completed: boolean;
+  completedAt?: string;
+  rpe?: number;
+  painReported?: boolean;
+  painLocation?: string;
+  notes?: string;
+}
+
+/**
+ * @graph-entity AdaptationMilestone
+ * @description Marco de transição física rumo à corrida contínua e VDOT
+ * @module adaptationMilestones
+ */
+export interface AdaptationMilestone {
+  id: string;
+  order: number;
+  title: string;
+  subtitle: string;
+  targetMetric: string;
+  currentMetric: string;
+  completed: boolean;
+  completedDate?: string;
+  unlockedVdotBenefit?: string;
+  badgeIcon: string;
+}
+
 
 export type DistanceType = 
   | '400m' 

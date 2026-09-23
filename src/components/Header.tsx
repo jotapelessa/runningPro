@@ -41,17 +41,50 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenResetModal,
   onToggleMobileMenu,
 }) => {
-  const isUncalibrated = runnerState.isCalibrated === false || (runnerState.currentVdot || 0) <= 0;
+  const isTransitionUser = runnerState.level === 'sedentary_transition' || runnerState.activityProfile === 'sedentary';
+  const isUncalibrated = !isTransitionUser && (runnerState.isCalibrated === false || (runnerState.currentVdot || 0) <= 0);
 
   const tabTitles: Record<AppTab, { label: string; desc: string; icon: React.ElementType }> = {
-    guide: { label: 'Guia & Tutorial', desc: 'Instruções completas e base científica', icon: BookOpen },
-    atividades: { label: 'Atividades & HUD', desc: 'Histórico de corridas e gerador de Stories 9:16 para Instagram', icon: Activity },
-    importer: { label: 'Importar Relógio', desc: 'Upload e calibração de arquivos GPX, TCX e FIT', icon: Watch },
-    zonas: { label: 'Zonas & Testes', desc: 'Tabela de Paces VDOT de Jack Daniels e Zonas Cardíacas Karvonen', icon: Gauge },
-    planilha: { label: 'Planilha 8 Semanas', desc: 'Periodização científica baseada no seu VDOT calibrado', icon: CalendarCheck },
-    previsoes: { label: 'Previsões de Prova', desc: 'Estimativas de tempo e splits de 5km à Maratona', icon: Trophy },
-    recuperacao: { label: 'Recuperação & Dores', desc: 'Monitoramento de carga aguda:crônica (ACWR) e mapa de dores', icon: HeartHandshake },
-    corridas: { label: 'Corridas no Brasil', desc: 'Calendário de maratonas e meias no país', icon: MapPin },
+    guide: { 
+      label: 'Guia & Tutorial', 
+      desc: isTransitionUser ? 'Método Run-Walk e transição biológica segura para o VDOT' : 'Instruções completas e base científica', 
+      icon: BookOpen 
+    },
+    atividades: { 
+      label: 'Atividades & HUD', 
+      desc: 'Histórico de caminhadas, trotes e gerador de Stories 9:16', 
+      icon: Activity 
+    },
+    importer: { 
+      label: 'Importar Relógio', 
+      desc: 'Upload e calibração de arquivos GPX, TCX e FIT do seu smartwatch', 
+      icon: Watch 
+    },
+    zonas: { 
+      label: isTransitionUser ? 'Zonas & Fisiologia' : 'Zonas & Testes', 
+      desc: isTransitionUser ? 'Escala RPE de Esforço Percebido e proteção musculoesquelética' : 'Tabela de Paces VDOT de Jack Daniels e Zonas Cardíacas Karvonen', 
+      icon: Gauge 
+    },
+    planilha: { 
+      label: isTransitionUser ? 'Calendário de Treinos' : 'Planilha 8 Semanas', 
+      desc: isTransitionUser ? 'Programação semanal de trote/caminhada e dias de proteção articular' : 'Periodização científica baseada no seu VDOT calibrado', 
+      icon: CalendarCheck 
+    },
+    previsoes: { 
+      label: isTransitionUser ? 'Marcos de Evolução' : 'Previsões de Prova', 
+      desc: isTransitionUser ? 'Escada de progresso gradual até a corrida de 3km contínuos para desbloqueio do VDOT' : 'Estimativas de tempo e splits de 5km à Maratona', 
+      icon: Trophy 
+    },
+    recuperacao: { 
+      label: isTransitionUser ? 'Proteção Articular' : 'Recuperação & Dores', 
+      desc: isTransitionUser ? 'Monitoramento de canelite, tendões e prontidão musculoesquelética' : 'Monitoramento de carga aguda:crônica (ACWR) e mapa de dores', 
+      icon: HeartHandshake 
+    },
+    corridas: { 
+      label: 'Corridas no Brasil', 
+      desc: 'Calendário de maratonas, meias e circuitos de rua', 
+      icon: MapPin 
+    },
   };
 
   const currentTabInfo = tabTitles[activeTab] || tabTitles.atividades;

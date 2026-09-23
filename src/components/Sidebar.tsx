@@ -31,15 +31,18 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   setActiveTab,
+  runnerState,
   isMobileOpen,
   onCloseMobile,
 }) => {
+  const isTransitionUser = runnerState?.level === 'sedentary_transition' || runnerState?.activityProfile === 'sedentary';
+
   const tabsConfig = [
     { 
       id: 'guide' as AppTab, 
       label: 'Guia & Tutorial', 
       icon: BookOpen,
-      desc: 'Instruções e metodologias'
+      desc: isTransitionUser ? 'Método Run-Walk & VDOT' : 'Instruções e metodologias'
     },
     { 
       id: 'atividades' as AppTab, 
@@ -55,27 +58,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     { 
       id: 'zonas' as AppTab, 
-      label: 'Zonas & Testes', 
+      label: isTransitionUser ? 'Zonas & Fisiologia' : 'Zonas & Testes', 
       icon: Gauge,
-      desc: 'VDOT e Karvonen'
+      desc: isTransitionUser ? 'Esforço RPE & Limiares' : 'VDOT e Karvonen'
     },
     { 
       id: 'planilha' as AppTab, 
-      label: 'Planilha 8 Semanas', 
+      label: isTransitionUser ? 'Calendário de Treinos' : 'Planilha 8 Semanas', 
       icon: CalendarCheck,
-      desc: 'Prescrição personalizada'
+      desc: isTransitionUser ? 'Adaptação Musculoesquelética' : 'Prescrição personalizada'
     },
     { 
       id: 'previsoes' as AppTab, 
-      label: 'Previsões de Prova', 
+      label: isTransitionUser ? 'Marcos de Evolução' : 'Previsões de Prova', 
       icon: Trophy,
-      desc: '5k a 42k com splits'
+      desc: isTransitionUser ? 'Transição para Corrida Contínua' : '5k a 42k com splits'
     },
     { 
       id: 'recuperacao' as AppTab, 
-      label: 'Recuperação & Dores', 
+      label: isTransitionUser ? 'Proteção Articular' : 'Recuperação & Dores', 
       icon: HeartHandshake,
-      desc: 'Prontidão e dores'
+      desc: isTransitionUser ? 'Dores e descanso ativo' : 'Prontidão e dores'
     },
     { 
       id: 'corridas' as AppTab, 
