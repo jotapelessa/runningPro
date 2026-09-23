@@ -79,18 +79,28 @@ export const ActivitiesTab: React.FC<ActivitiesTabProps> = ({
     try {
       const { fetchIntervalsActivities, mapIntervalsToUserActivity } = await import('../lib/intervalsIcu');
       
-      // Buscar os últimos 30 dias por padrão
+      // O Intervals.icu espera datas locais no formato YYYY-MM-DDTHH:MM:SS ou apenas YYYY-MM-DD
+      // Evitamos o 'Z' do toISOString() para não causar problemas de fuso horário que escondem treinos recentes
       const now = new Date();
       
-      // Omitimos o oldest e newest para buscar por padrão, ou usamos strings precisas:
-      // A API aceita strings de data. Adicionamos 1 dia ao newest para evitar cortes de timezone
-      const newestDate = new Date();
-      newestDate.setDate(now.getDate() + 1);
-      const newest = newestDate.toISOString().split('T')[0] + 'T23:59:59Z';
+      const newestDate = new Date(now);
+      newestDate.setDate(newestDate.getDate() + 1);
       
-      const oldestDate = new Date();
-      oldestDate.setDate(now.getDate() - 30);
-      const oldest = oldestDate.toISOString().split('T')[0] + 'T00:00:00Z';
+      const oldestDate = new Date(now);
+      oldestDate.setDate(oldestDate.getDate() - 30);
+
+      // Usando formato de string local ajustada para YYYY-MM-DD
+      const formatLocalISO = (d: Date) => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}T23:59:59`; // Intervals aceita sem 'Z' como hora local do atleta
+      };
+
+      const newest = formatLocalISO(newestDate);
+      
+      // Para o oldest, a hora inicial do dia
+      const oldest = `${oldestDate.getFullYear()}-${String(oldestDate.getMonth() + 1).padStart(2, '0')}-${String(oldestDate.getDate()).padStart(2, '0')}T00:00:00`;
 
       const intervalsActivities = await fetchIntervalsActivities(
         runnerState.intervalsAthleteId || '', 

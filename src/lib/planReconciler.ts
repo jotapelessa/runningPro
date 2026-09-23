@@ -62,10 +62,9 @@ export function calibrateRunnerFromActivities(
   const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
   const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
 
-  // Filtrar treinos recentes (últimos 30 dias)
   const recentActivities = activities.filter(a => {
     const t = new Date(a.date).getTime();
-    return !isNaN(t) && (now - t) <= thirtyDaysMs;
+    return !isNaN(t) && (now - t) <= thirtyDaysMs && a.source === 'intervals';
   });
 
   if (recentActivities.length === 0) {
@@ -173,10 +172,10 @@ export function reconcilePlanWithActivities(
     days: week.days.map((day: DailyWorkout) => ({ ...day }))
   }));
 
-  // Ordena atividades: mais recentes primeiro
-  const sortedActivities = [...activities].sort(
-    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-  );
+  // Ordena atividades: mais recentes primeiro e apenas do Intervals.icu
+  const sortedActivities = [...activities]
+    .filter(a => a.source === 'intervals')
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   sortedActivities.forEach(act => {
     if (act.type !== 'run' && act.type !== 'walk' && act.type !== 'other') return;
