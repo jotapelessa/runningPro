@@ -493,6 +493,8 @@ export default function App() {
         isOpen={isAthleteModalOpen}
         onClose={() => setIsAthleteModalOpen(false)}
         runnerState={runnerState}
+        plan={plan}
+        activities={activities}
         onSave={handleUpdateRunnerState}
         onOpenResetModal={() => setIsResetModalOpen(true)}
       />

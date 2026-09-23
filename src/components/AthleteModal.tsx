@@ -26,10 +26,11 @@ import {
   FileSpreadsheet,
   CheckCheck
 } from 'lucide-react';
-import { RunnerState, RunnerLevel, DistanceType, ParsedWorkout, MultiWorkoutTelemetrySummary } from '../types';
+import { RunnerState, RunnerLevel, DistanceType, ParsedWorkout, MultiWorkoutTelemetrySummary, TrainingPlan, UserActivity } from '../types';
 import { calculateVDOT, calculateTrainingPaces } from '../lib/vdotCalculator';
 import { parseMultipleWorkoutFiles, aggregateWorkoutTelemetry } from '../lib/workoutParser';
 import { computeAthletePrescription } from '../lib/athletePrescriptionEngine';
+import { exportToObsidianMarkdown, exportToGraphifyJson } from '../lib/secondBrainExport';
 
 interface AthleteModalProps {
   isOpen: boolean;
@@ -38,6 +39,8 @@ interface AthleteModalProps {
   onSave: (updatedState: Partial<RunnerState>) => void;
   onOpenResetModal?: () => void;
   onWorkoutUploaded?: (workout: ParsedWorkout) => void;
+  plan?: TrainingPlan;
+  activities?: UserActivity[];
 }
 
 export const AthleteModal: React.FC<AthleteModalProps> = ({
@@ -47,6 +50,8 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
   onSave,
   onOpenResetModal,
   onWorkoutUploaded,
+  plan,
+  activities,
 }) => {
   if (!isOpen) return null;
 
@@ -119,6 +124,33 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
     } finally {
       setIsTestingIntervals(false);
     }
+  };
+
+  // PKM Export Handlers
+  const handleExportObsidian = () => {
+    if (!plan || !activities) return;
+    const md = exportToObsidianMarkdown(runnerState, plan, activities);
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `Athlete_${name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.md`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleExportGraphify = () => {
+    if (!plan || !activities) return;
+    const json = exportToGraphifyJson(runnerState, plan, activities);
+    const blob = new Blob([json], { type: 'application/json;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `Athlete_${name.replace(/\s+/g, '_')}_Graphify.json`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   // Process selected or dropped files (supports 1 or multiple files simultaneously)
@@ -949,7 +981,7 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
               </div>
               <div className="sm:col-span-2 flex items-center justify-between">
                 <span className="text-[10px] text-slate-400">
-                  Ao preencher a chave, você poderá sincronizar seus treinos do Zepp/Strava e calendário de planilhas.
+                  Ao preencher a chave, você poderá sincronizar seus treinos e o calendário de planilhas.
                 </span>
                 <button
                   type="button"
@@ -1107,6 +1139,42 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
                 </div>
               )}
             </div>
+          </div>
+        </div>
+
+        {/* PKM / Segundo Cérebro Export */}
+        <div className="p-6 border-t border-white/10 bg-[#121214]">
+          <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-4">
+            <span className="p-1.5 bg-[#FF4E00]/10 border border-[#FF4E00]/30 rounded-lg text-[#FF4E00]">
+              <FileCode className="w-4 h-4" />
+            </span>
+            Integração com "Segundo Cérebro"
+          </h3>
+          <p className="text-xs text-slate-400 mb-4">
+            Exporte seus dados fisiológicos, limiares, ritmos de treino (VDOT), zonas de frequência cardíaca e histórico recente para ferramentas de Personal Knowledge Management (PKM) como Obsidian, Logseq ou Graphify.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <button
+              id="btn-export-obsidian"
+              type="button"
+              onClick={handleExportObsidian}
+              disabled={!plan || !activities}
+              className="px-4 py-2.5 rounded-xl bg-purple-900/20 hover:bg-purple-900/40 border border-purple-500/30 text-purple-300 text-xs font-semibold flex items-center gap-2 transition-colors disabled:opacity-50 cursor-pointer"
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              <span>Exportar para Obsidian (Markdown)</span>
+            </button>
+            
+            <button
+              id="btn-export-graphify"
+              type="button"
+              onClick={handleExportGraphify}
+              disabled={!plan || !activities}
+              className="px-4 py-2.5 rounded-xl bg-blue-900/20 hover:bg-blue-900/40 border border-blue-500/30 text-blue-300 text-xs font-semibold flex items-center gap-2 transition-colors disabled:opacity-50 cursor-pointer"
+            >
+              <FileCode className="w-4 h-4" />
+              <span>Exportar para Graphify (JSON)</span>
+            </button>
           </div>
         </div>
 
