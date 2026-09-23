@@ -36,6 +36,7 @@ import {
 } from '../lib/activitiesStorage';
 import { ActivityDetailModal } from './ActivityDetailModal';
 import { ManualActivityModal } from './ManualActivityModal';
+import { GoogleConnectModal } from './GoogleConnectModal';
 import { formatPace, formatTime } from '../lib/vdotCalculator';
 
 interface ActivitiesTabProps {
@@ -54,6 +55,7 @@ export const ActivitiesTab: React.FC<ActivitiesTabProps> = ({
   // Sync State
   const [syncState, setSyncState] = useState<GoogleSyncState>(() => loadGoogleSyncState());
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [isGoogleModalOpen, setIsGoogleModalOpen] = useState<boolean>(false);
   const [syncFeedback, setSyncFeedback] = useState<{ message: string; type: 'success' | 'info' } | null>(null);
 
   // Filters State
@@ -263,14 +265,23 @@ export const ActivitiesTab: React.FC<ActivitiesTabProps> = ({
             <Globe className="w-5 h-5" />
           </div>
           <div className="space-y-0.5">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-bold text-white font-heading">
                 Google Fit / Google Health Connect API
               </span>
-              <span className="text-[10px] font-mono-data bg-emerald-950/80 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-md font-bold flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                CONECTADO & SEGURO
+              <span className={`text-[10px] font-mono-data px-2 py-0.5 rounded-md font-bold flex items-center gap-1 ${
+                syncState.isConnected
+                  ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-500/30'
+                  : 'bg-blue-950/80 text-blue-300 border border-blue-500/30'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${syncState.isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-blue-400'}`} />
+                {syncState.isConnected ? 'CONECTADO & SEGURO' : 'CONEXÃO DISPONÍVEL'}
               </span>
+              {syncState.userEmail && (
+                <span className="text-[11px] font-mono-data bg-white/5 border border-white/10 px-2 py-0.5 rounded-md text-slate-300">
+                  {syncState.userEmail}
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-400">
               Última sincronização: {syncState.lastSync ? new Date(syncState.lastSync).toLocaleString('pt-BR') : 'Nunca sincronizado'} • Deduplicação inteligente de treinos ativada
@@ -278,18 +289,28 @@ export const ActivitiesTab: React.FC<ActivitiesTabProps> = ({
           </div>
         </div>
 
-        <button
-          onClick={handleSyncGoogle}
-          disabled={isSyncing}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold font-mono-data uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
-            isSyncing
-              ? 'bg-white/10 text-slate-400 cursor-not-allowed'
-              : 'bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-600/25'
-          }`}
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-          <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar Google APIs'}</span>
-        </button>
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto">
+          <button
+            type="button"
+            onClick={() => setIsGoogleModalOpen(true)}
+            className="flex-1 sm:flex-initial px-3.5 py-2 rounded-xl text-xs font-bold font-mono-data border border-white/10 bg-white/5 hover:bg-white/10 text-slate-200 transition-all cursor-pointer whitespace-nowrap"
+          >
+            {syncState.isConnected ? 'Gerenciar Conta' : 'Conectar Conta Google'}
+          </button>
+
+          <button
+            onClick={handleSyncGoogle}
+            disabled={isSyncing}
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold font-mono-data uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
+              isSyncing
+                ? 'bg-white/10 text-slate-400 cursor-not-allowed'
+                : 'bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-600/25'
+            }`}
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar Google APIs'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Sync Feedback Alert */}
@@ -508,6 +529,15 @@ export const ActivitiesTab: React.FC<ActivitiesTabProps> = ({
         onClose={() => setIsManualModalOpen(false)}
         onSaveActivity={handleSaveManualActivity}
         availableShoes={runnerState.shoes || []}
+      />
+
+      {/* Google Connect OAuth Modal */}
+      <GoogleConnectModal
+        isOpen={isGoogleModalOpen}
+        onClose={() => setIsGoogleModalOpen(false)}
+        syncState={syncState}
+        onUpdateSyncState={(newState) => setSyncState(newState)}
+        onSyncActivities={handleSyncGoogle}
       />
     </div>
   );

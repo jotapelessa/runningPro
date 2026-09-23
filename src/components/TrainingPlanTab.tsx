@@ -17,6 +17,7 @@ import {
   Watch,
   UploadCloud
 } from 'lucide-react';
+import confetti from 'canvas-confetti';
 import { DailyWorkout, TrainingPlan, TrainingWeek, RunnerState, ParsedWorkout, UserActivity } from '../types';
 import { generateEightWeekPlan } from '../lib/planGenerator';
 import { generateRunWalkPlan, RUN_WALK_SCHEDULE } from '../lib/runWalkEngine';

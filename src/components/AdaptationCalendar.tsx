@@ -21,10 +21,11 @@ import {
   RefreshCw
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { CalendarSessionEvent, RunnerState, ParsedWorkout, UserActivity } from '../types';
+import { CalendarSessionEvent, RunnerState, ParsedWorkout, UserActivity, GoogleSyncState } from '../types';
 import { RUN_WALK_SCHEDULE } from '../lib/runWalkEngine';
 import { parseUniversalWorkoutFile } from '../lib/workoutParser';
-import { simulateGoogleFitSync, loadGoogleSyncState, saveGoogleSyncState, GoogleSyncState, loadUserActivities } from '../lib/activitiesStorage';
+import { simulateGoogleFitSync, loadGoogleSyncState, saveGoogleSyncState, loadUserActivities } from '../lib/activitiesStorage';
+import { GoogleConnectModal } from './GoogleConnectModal';
 
 interface AdaptationCalendarProps {
   runnerState: RunnerState;
@@ -47,7 +48,8 @@ export const AdaptationCalendar: React.FC<AdaptationCalendarProps> = ({
   const [isUploading, setIsUploading] = useState(false);
   const [uploadFeedback, setUploadFeedback] = useState<string | null>(null);
 
-  // Google Fit Sync State
+  // Google Fit Sync State & Modal
+  const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false);
   const [isSyncingGoogle, setIsSyncingGoogle] = useState(false);
   const [googleSyncState, setGoogleSyncState] = useState<GoogleSyncState>(() => loadGoogleSyncState());
 
@@ -299,10 +301,19 @@ export const AdaptationCalendar: React.FC<AdaptationCalendarProps> = ({
               <span className="text-xs font-bold text-white font-heading">
                 Google Fit / Google Health Connect API
               </span>
-              <span className="text-[10px] font-mono-data bg-emerald-950/80 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-md font-bold flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                CONECTADO & SEGURO
+              <span className={`text-[10px] font-mono-data px-2 py-0.5 rounded-md font-bold flex items-center gap-1 ${
+                googleSyncState.isConnected
+                  ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-500/30'
+                  : 'bg-blue-950/80 text-blue-300 border border-blue-500/30'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${googleSyncState.isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-blue-400'}`} />
+                {googleSyncState.isConnected ? 'CONECTADO & SEGURO' : 'CONEXÃO DISPONÍVEL'}
               </span>
+              {googleSyncState.userEmail && (
+                <span className="text-[11px] font-mono-data bg-white/5 border border-white/10 px-2 py-0.5 rounded-md text-slate-300">
+                  {googleSyncState.userEmail}
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-400">
               Última sincronização: {googleSyncState.lastSync ? new Date(googleSyncState.lastSync).toLocaleString('pt-BR') : '18/09/2026, 05:00:15'} • Deduplicação inteligente de treinos ativada
@@ -310,18 +321,28 @@ export const AdaptationCalendar: React.FC<AdaptationCalendarProps> = ({
           </div>
         </div>
 
-        <button
-          onClick={handleSyncGoogleFit}
-          disabled={isSyncingGoogle}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold font-mono-data uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
-            isSyncingGoogle
-              ? 'bg-white/10 text-slate-400 cursor-not-allowed'
-              : 'bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-600/25'
-          }`}
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${isSyncingGoogle ? 'animate-spin' : ''}`} />
-          <span>{isSyncingGoogle ? 'Sincronizando Google Fit...' : 'Sincronizar Google Fit'}</span>
-        </button>
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto">
+          <button
+            type="button"
+            onClick={() => setIsGoogleModalOpen(true)}
+            className="flex-1 sm:flex-initial px-3.5 py-2 rounded-xl text-xs font-bold font-mono-data border border-white/10 bg-white/5 hover:bg-white/10 text-slate-200 transition-all cursor-pointer whitespace-nowrap"
+          >
+            {googleSyncState.isConnected ? 'Gerenciar Conta' : 'Conectar Conta Google'}
+          </button>
+
+          <button
+            onClick={handleSyncGoogleFit}
+            disabled={isSyncingGoogle}
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold font-mono-data uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
+              isSyncingGoogle
+                ? 'bg-white/10 text-slate-400 cursor-not-allowed'
+                : 'bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-600/25'
+            }`}
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncingGoogle ? 'animate-spin' : ''}`} />
+            <span>{isSyncingGoogle ? 'Sincronizando...' : 'Sincronizar Google Fit'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Interactive Preferred Days of Week Selector */}
@@ -519,6 +540,15 @@ export const AdaptationCalendar: React.FC<AdaptationCalendarProps> = ({
           {uploadFeedback}
         </div>
       )}
+
+      {/* Google Connect OAuth Modal */}
+      <GoogleConnectModal
+        isOpen={isGoogleModalOpen}
+        onClose={() => setIsGoogleModalOpen(false)}
+        syncState={googleSyncState}
+        onUpdateSyncState={(newState) => setGoogleSyncState(newState)}
+        onSyncActivities={handleSyncGoogleFit}
+      />
 
     </div>
   );

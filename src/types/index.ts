@@ -457,6 +457,11 @@ export interface GoogleSyncState {
   serviceName: string;
   syncedCount: number;
   errorMessage?: string;
+  isConnected?: boolean;
+  userEmail?: string;
+  userName?: string;
+  userAvatar?: string;
+  clientId?: string;
 }
 
 export interface CardPlacement {
