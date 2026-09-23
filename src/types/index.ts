@@ -390,6 +390,7 @@ export interface ChatMessage {
   role: 'user' | 'assistant';
   text: string;
   timestamp: string;
+  source?: string;
 }
 
 export type ActivityType = 'run' | 'walk' | 'trail' | 'treadmill';
@@ -436,6 +437,7 @@ export interface UserActivity {
   elevationLossMeters?: number;
   cadenceSpm?: number;
   vdot?: number;
+  cardiacDriftPct?: number;
   notes?: string;
   shoeName?: string;
   route?: RoutePoint[];

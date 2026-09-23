@@ -136,6 +136,14 @@ export const CoachChat: React.FC<CoachChatProps> = ({ runnerState, activities = 
                   );
                 }
               }
+
+              if (dataPayload.source) {
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === botMessageId ? { ...msg, source: dataPayload.source } : msg
+                  )
+                );
+              }
             } catch (jsonErr) {
               // Ignore partial or non-json SSE lines
             }
@@ -176,6 +184,7 @@ export const CoachChat: React.FC<CoachChatProps> = ({ runnerState, activities = 
             role: 'assistant',
             text: fallbackData.text || 'Lembre-se: mantenha pelo menos 75% da sua semana em Z2 (Pace E) para recuperação garantida.',
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            source: fallbackData.source || 'local-fallback',
           }
         ]);
       } catch (finalErr) {
@@ -186,6 +195,7 @@ export const CoachChat: React.FC<CoachChatProps> = ({ runnerState, activities = 
             role: 'assistant',
             text: 'Desculpe, tive uma instabilidade temporária na conexão. Mantenha os treinos fáceis em Z2 e hidrate-se bem.',
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            source: 'local-offline',
           }
         ]);
       }
@@ -294,9 +304,21 @@ export const CoachChat: React.FC<CoachChatProps> = ({ runnerState, activities = 
                   >
                     <div className="whitespace-pre-wrap font-sans">{msg.text}</div>
                   </div>
-                  <span className="text-[10px] text-slate-500 px-1 mt-1 font-mono-data">
-                    {msg.timestamp}
-                  </span>
+                  <div className="flex items-center gap-1.5 px-1 mt-1 font-mono-data text-[10px] text-slate-500">
+                    <span>{msg.timestamp}</span>
+                    {!isUser && msg.source && (
+                      <>
+                        <span>•</span>
+                        <span className={`px-1.5 py-0.2 rounded text-[9px] font-semibold ${
+                          msg.source.includes('gemini')
+                            ? 'bg-[#FF4E00]/10 text-[#FF4E00] border border-[#FF4E00]/30'
+                            : 'bg-white/5 text-slate-400 border border-white/10'
+                        }`}>
+                          {msg.source.includes('gemini') ? `⚡ ${msg.source}` : '🛡️ motor local'}
+                        </span>
+                      </>
+                    )}
+                  </div>
                 </div>
               );
             })}

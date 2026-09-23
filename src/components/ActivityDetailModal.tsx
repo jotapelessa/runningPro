@@ -21,7 +21,7 @@ import {
 import { UserActivity } from '../types';
 import { ActivityHudMap } from './ActivityHudMap';
 import { StoryStudioModal } from './StoryStudioModal';
-import { formatPace, formatTime } from '../lib/vdotCalculator';
+import { formatPace, formatTime, calculateCardiacDrift } from '../lib/vdotCalculator';
 
 interface ActivityDetailModalProps {
   activity: UserActivity | null;
@@ -162,10 +162,32 @@ export const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({
                 </div>
               </div>
 
-              <div className="text-right">
-                <span className="text-[10px] font-mono-data text-emerald-400 uppercase bg-emerald-950/60 border border-emerald-500/30 px-2.5 py-1 rounded-lg font-bold">
-                  EFICIÊNCIA CALCULADA
-                </span>
+              <div className="flex items-center gap-3">
+                {(() => {
+                  const drift = activity.cardiacDriftPct ?? (splits.length >= 4 ? calculateCardiacDrift(splits) : undefined);
+                  if (drift === undefined) {
+                    return (
+                      <span className="text-[10px] font-mono-data text-emerald-400 uppercase bg-emerald-950/60 border border-emerald-500/30 px-2.5 py-1 rounded-lg font-bold">
+                        EFICIÊNCIA CALCULADA
+                      </span>
+                    );
+                  }
+                  const isGood = drift <= 5.0;
+                  return (
+                    <div className="flex flex-col items-end">
+                      <span className={`text-[10px] font-mono-data uppercase px-2.5 py-1 rounded-lg font-bold border ${
+                        isGood 
+                          ? 'text-emerald-400 bg-emerald-950/60 border-emerald-500/30' 
+                          : 'text-amber-400 bg-amber-950/60 border-amber-500/30'
+                      }`}>
+                        DRIFT CARDÍACO: {drift > 0 ? `+${drift}%` : `${drift}%`}
+                      </span>
+                      <span className="text-[9px] text-slate-400 mt-0.5">
+                        {isGood ? 'Aeróbio estável (Pw:HR ≤ 5%)' : 'Desacoplamento aeróbio (> 5%)'}
+                      </span>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           )}

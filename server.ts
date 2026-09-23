@@ -58,7 +58,8 @@ app.post("/api/coach", async (req, res) => {
       recentActivitiesContext = activities.slice(0, 5).map((act: any, idx: number) => {
         const typeLabel = act.type === 'run' ? 'Corrida' : act.type === 'walk' ? 'Caminhada' : act.type;
         const hrInfo = act.avgHr ? ` | FC Média: ${act.avgHr} bpm` : '';
-        return `[Atividade ${idx + 1}] ${act.date ? new Date(act.date).toLocaleDateString('pt-BR') : ''} - ${typeLabel}: ${act.distanceKm?.toFixed(2) || 0} km em ${act.durationFormatted || 'N/A'} (Pace: ${act.paceFormatted || 'N/A'}/km${hrInfo}) [Origem: ${act.sourceLabel || act.source || 'Zepp/Fit'}]`;
+        const driftInfo = act.cardiacDriftPct !== undefined ? ` | Drift Cardíaco: ${act.cardiacDriftPct}%` : '';
+        return `[Atividade ${idx + 1}] ${act.date ? new Date(act.date).toLocaleDateString('pt-BR') : ''} - ${typeLabel}: ${act.distanceKm?.toFixed(2) || 0} km em ${act.durationFormatted || 'N/A'} (Pace: ${act.paceFormatted || 'N/A'}/km${hrInfo}${driftInfo}) [Origem: ${act.sourceLabel || act.source || 'Zepp/Fit'}]`;
       }).join('\n');
     }
 
@@ -174,7 +175,8 @@ app.post("/api/coach/stream", async (req, res) => {
     recentActivitiesContext = activities.slice(0, 5).map((act: any, idx: number) => {
       const typeLabel = act.type === 'run' ? 'Corrida' : act.type === 'walk' ? 'Caminhada' : act.type;
       const hrInfo = act.avgHr ? ` | FC Média: ${act.avgHr} bpm` : '';
-      return `[Atividade ${idx + 1}] ${act.date ? new Date(act.date).toLocaleDateString('pt-BR') : ''} - ${typeLabel}: ${act.distanceKm?.toFixed(2) || 0} km em ${act.durationFormatted || 'N/A'} (Pace: ${act.paceFormatted || 'N/A'}/km${hrInfo}) [Origem: ${act.sourceLabel || act.source || 'Zepp/Fit'}]`;
+      const driftInfo = act.cardiacDriftPct !== undefined ? ` | Drift Cardíaco: ${act.cardiacDriftPct}%` : '';
+      return `[Atividade ${idx + 1}] ${act.date ? new Date(act.date).toLocaleDateString('pt-BR') : ''} - ${typeLabel}: ${act.distanceKm?.toFixed(2) || 0} km em ${act.durationFormatted || 'N/A'} (Pace: ${act.paceFormatted || 'N/A'}/km${hrInfo}${driftInfo}) [Origem: ${act.sourceLabel || act.source || 'Zepp/Fit'}]`;
     }).join('\n');
   }
 

@@ -427,3 +427,44 @@ export function calculateEnvironmentalAdjustment(
     adjustedVdot: Math.round(adjustedVdot * 10) / 10
   };
 }
+
+/**
+ * Calculates Cardiac Drift (Decoupling Aeróbio Pw:HR) from splits
+ * Compares Pace:HR efficiency between the 1st half and 2nd half of the activity.
+ * Drift > 5.0% indicates dehydration, glycogen depletion or loss of aerobic efficiency.
+ */
+export function calculateCardiacDrift(splits: Array<{ durationSeconds: number; distanceMeters?: number; avgHr?: number; paceSeconds?: number }>): number | undefined {
+  if (!splits || splits.length < 4) return undefined;
+
+  const validSplits = splits.filter(s => s.avgHr && s.avgHr > 60 && (s.paceSeconds || s.durationSeconds));
+  if (validSplits.length < 4) return undefined;
+
+  const half = Math.floor(validSplits.length / 2);
+  const firstHalf = validSplits.slice(0, half);
+  const secondHalf = validSplits.slice(half);
+
+  // Efficiency factor EF = Speed (m/s) / HeartRate
+  const calcEfficiency = (part: typeof validSplits) => {
+    let totalSpeed = 0;
+    let totalHr = 0;
+    part.forEach(s => {
+      const paceSec = s.paceSeconds || s.durationSeconds;
+      const speed = paceSec > 0 ? 1000 / paceSec : 0;
+      totalSpeed += speed;
+      totalHr += (s.avgHr || 140);
+    });
+    const avgSpeed = totalSpeed / part.length;
+    const avgHr = totalHr / part.length;
+    return avgHr > 0 ? avgSpeed / avgHr : 0;
+  };
+
+  const ef1 = calcEfficiency(firstHalf);
+  const ef2 = calcEfficiency(secondHalf);
+
+  if (ef1 <= 0 || ef2 <= 0) return undefined;
+
+  // Drift % = ((EF1 - EF2) / EF1) * 100
+  const driftPct = ((ef1 - ef2) / ef1) * 100;
+  return Math.round(driftPct * 10) / 10;
+}
+
