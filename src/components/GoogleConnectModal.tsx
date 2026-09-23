@@ -59,9 +59,26 @@ export const GoogleConnectModal: React.FC<GoogleConnectModalProps> = ({
   // Exchange authorization code via backend server
   const handleExchangeAuthCode = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!authCodeInput.trim()) {
-      setStatusMessage({ text: 'Por favor, cole o código fornecido pelo Google.', type: 'error' });
+    let rawCode = authCodeInput.trim();
+    if (!rawCode) {
+      setStatusMessage({ text: 'Por favor, cole o código ou a URL copiada do navegador.', type: 'error' });
       return;
+    }
+
+    // If user pasted the whole redirected URL (e.g. http://localhost:3005/?code=4/0A...)
+    if (rawCode.includes('code=')) {
+      try {
+        const urlObj = new URL(rawCode.startsWith('http') ? rawCode : `http://localhost:3005/${rawCode}`);
+        const extracted = urlObj.searchParams.get('code');
+        if (extracted) {
+          rawCode = extracted;
+        }
+      } catch (e) {
+        const match = rawCode.match(/[?&]code=([^&]+)/);
+        if (match && match[1]) {
+          rawCode = decodeURIComponent(match[1]);
+        }
+      }
     }
 
     setIsAuthenticating(true);
@@ -72,8 +89,8 @@ export const GoogleConnectModal: React.FC<GoogleConnectModalProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          code: authCodeInput.trim(),
-          redirectUri: 'urn:ietf:wg:oauth:2.0:oob'
+          code: rawCode,
+          redirectUri: 'http://localhost:3005'
         })
       });
 
@@ -106,6 +123,8 @@ export const GoogleConnectModal: React.FC<GoogleConnectModalProps> = ({
       setIsAuthenticating(false);
     }
   };
+
+
 
   const handleTokenReceived = async (token: string) => {
     setIsAuthenticating(true);
@@ -437,7 +456,7 @@ export const GoogleConnectModal: React.FC<GoogleConnectModalProps> = ({
                         'https://www.googleapis.com/auth/fitness.body.read'
                       ].join(' ');
                       const effectiveClientId = clientIdInput.trim() || '410928349212-b05lupvu93pgiroqkgmssob3ahhscjqe.apps.googleusercontent.com';
-                      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(effectiveClientId)}&redirect_uri=urn:ietf:wg:oauth:2.0:oob&response_type=code&scope=${encodeURIComponent(scopes)}&access_type=offline&prompt=consent`;
+                      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(effectiveClientId)}&redirect_uri=http://localhost:3005&response_type=code&scope=${encodeURIComponent(scopes)}&access_type=offline&prompt=consent`;
                       window.open(authUrl, '_blank');
                     }}
                     className="px-4 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-900 font-bold text-xs font-heading flex items-center justify-center gap-2 shadow transition-all cursor-pointer whitespace-nowrap"
