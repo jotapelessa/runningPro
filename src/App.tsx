@@ -307,7 +307,9 @@ export default function App() {
                 currentPlan={plan}
                 onUpdatePlan={handleUpdatePlan}
                 onOpenAthleteModal={() => setIsAthleteModalOpen(true)}
+                onUpdateRunnerState={handleUpdateRunnerState}
               />
+
             </motion.div>
           )}
 

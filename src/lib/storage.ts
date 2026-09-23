@@ -1,6 +1,8 @@
 import { RunnerState, DailyRecoveryCheckin, TestRecord, TrainingPlan, UserActivity } from '../types';
 import { generateEightWeekPlan } from './planGenerator';
+import { generateRunWalkPlan } from './runWalkEngine';
 import { loadUserActivities, saveUserActivities, resetUserActivities } from './activitiesStorage';
+
 
 const STORAGE_KEY_RUNNER = 'pacelab_runner_state_v3.5';
 const STORAGE_KEY_HISTORY = 'pacelab_test_history_v3.5';
@@ -183,6 +185,11 @@ export function loadTrainingPlan(nameOrProfile: string | RunnerState = 'Carlos O
   }
   const runnerName = typeof nameOrProfile === 'string' ? nameOrProfile : nameOrProfile.name;
   const runnerVdot = typeof nameOrProfile === 'string' ? vdot : nameOrProfile.currentVdot;
+  const isTransition = typeof nameOrProfile !== 'string' && (nameOrProfile.level === 'sedentary_transition' || nameOrProfile.activityProfile === 'sedentary');
+
+  if (isTransition) {
+    return generateRunWalkPlan(runnerName, typeof nameOrProfile !== 'string' ? (nameOrProfile.trainingDays || 3) : 3);
+  }
 
   return generateEightWeekPlan(
     runnerName,
@@ -191,6 +198,7 @@ export function loadTrainingPlan(nameOrProfile: string | RunnerState = 'Carlos O
     4
   );
 }
+
 
 export function saveTrainingPlan(plan: TrainingPlan): void {
   try {

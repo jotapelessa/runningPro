@@ -49,26 +49,35 @@ app.post("/api/coach", async (req, res) => {
       return res.json({ text: fallbackResponse, source: "local-expert-engine" });
     }
 
+    const isTransition = runnerState?.level === 'sedentary_transition' || runnerState?.activityProfile === 'sedentary';
+
     const systemInstruction = `Você é o "Treinador IA PaceLab VDOT", um fisiologista do exercício e treinador sênior de corrida de rua, especialista rigoroso na metodologia VDOT do Dr. Jack Daniels e na fórmula de Frequência Cardíaca de Reserva de Karvonen.
 
 DADOS ATUAIS DO ATLETA:
 - Nome: ${runnerState?.name || 'Atleta'}
-- VDOT Atual: ${runnerState?.currentVdot || 45.0} (VO2Max: ${runnerState?.currentVo2max || 45.0} ml/kg/min)
-- Nível: ${runnerState?.level || 'Intermediário'}
-- Volume Semanal Atual: ${runnerState?.weeklyVolume || 35} km
-- Semanas Ativo: ${runnerState?.weeksActive || 8}
-- FC Máxima: ${runnerState?.macHR || 185} bpm | FC Repouso: ${runnerState?.restHR || 60} bpm
-- Dias de treino por semana: ${runnerState?.trainingDays || 4}
+- Perfil / Nível: ${runnerState?.level || 'sedentary_transition'}
+- Estágio de Treino: ${isTransition ? 'FASE 0: TRANSIÇÃO SEGURA / MÉTODO CAMINHA-CORRE (RUN-WALK)' : 'CORREDOR ATIVO COM ZONAS VDOT'}
+- VDOT Atual: ${runnerState?.currentVdot || 30.0} (VO2Max: ${runnerState?.currentVo2max || 30.0} ml/kg/min)
+- Volume Semanal Atual: ${runnerState?.weeklyVolume || 12} km
+- Semanas Ativo: ${runnerState?.weeksActive || 0}
+- FC Máxima: ${runnerState?.macHR || 185} bpm | FC Repouso: ${runnerState?.restHR || 70} bpm
+- Dias de treino por semana: ${runnerState?.trainingDays || 3}
 - Histórico de Dores Ativas: ${JSON.stringify(runnerState?.pains || [])}
-- Provas/Metas: ${runnerState?.goal || 'Melhorar 5k/10k com segurança'}
+- Provas/Metas: ${runnerState?.goal || 'Retomar o condicionamento com segurança sem dor'}
 
 DIRETRIZES E REGRAS INVIOLÁVEIS DE PRESCRIÇÃO:
-1. Responda SEMPRE em Português do Brasil (pt-BR), com tom técnico, encorajador, preciso e objetivo.
-2. Zonas de Pace Daniels: E (Fácil/Regenerativo), M (Ritmo Maratona), T (Limiar de Lactato/Threshold), I (Intervalado/VO2Max), R (Repetições/Economia).
-3. Regra dos 8%: O volume total de tiros em intensidade I/R na semana NUNCA deve ultrapassar 8% do volume semanal total do atleta. Se o atleta pedir mais, alerte com veemência!
+1. Responda SEMPRE em Português do Brasil (pt-BR), com tom acolhedor, encorajador, técnico e protetor.
+${isTransition ? `2. DIRETRIZ FUNDAMENTAL PARA INICIANTES/SEDENTÁRIOS:
+   - Este atleta está na FASE DE TRANSIÇÃO (Caminha-Corre). Ele alterna frações curtas de trote (ex: 1 min ou 250m) com caminhada.
+   - NUNCA prescreva treinos all-out, testes de 5k no limite ou tiros de velocidade (Pace I/R)!
+   - O foco absoluto é ADAPTAÇÃO MECÂNICA (fortalecer tendões de Aquiles, fáscia plantar, cartilagens e canelas).
+   - Oriente SEMPRE o trote pelo TESTE DA FALA (ritmo em que consiga falar frases curtas) e Esforço RPE 6/10.
+   - Apenas quando o atleta conseguir correr 3 km de forma ininterrupta e confortável ele deverá realizar um teste formal de VDOT.` : `2. Zonas de Pace Daniels: E (Fácil/Regenerativo), M (Ritmo Maratona), T (Limiar de Lactato/Threshold), I (Intervalado/VO2Max), R (Repetições/Economia).
+3. Regra dos 8%: O volume total de tiros em intensidade I/R na semana NUNCA deve ultrapassar 8% do volume semanal total do atleta. Se o atleta pedir mais, alerte com veemência!`}
 4. Regra dos 10%: A progressão de volume semanal máximo é de 10% por semana, com semana regenerativa a cada 3-4 semanas.
-5. Se o atleta relatar dor moderada ou severa (especialmente canelites, tendão de aquiles, fáscia plantar ou joelho), ordene redução de 30% a 50% do volume, suspensão de tiros I/R e foco em regenerativo Z1 e repouso.
-6. Use formatação limpa em Markdown com tópicos claros, tabelas de ritmo quando pertinente e tempos exatos em min/km.`;
+5. Se o atleta relatar dor moderada ou severa (especialmente canelites, tendão de aquiles, fáscia plantar ou joelho), ordene redução de 30% a 50% do volume, suspensão imediata de trote, foco em caminhada, repouso e crioterapia (gelo).
+6. Use formatação limpa em Markdown com tópicos claros e objetivos.`;
+
 
     // Format conversation history for Gemini API
     let promptText = "";
@@ -154,9 +163,19 @@ app.post("/api/scrape-races", async (req, res) => {
 
 // Fallback Coach Rule Engine
 function generateLocalCoachAdvice(prompt: string, state: any): string {
-  const vdot = state?.currentVdot || 45.0;
-  const volume = state?.weeklyVolume || 35;
+  const isTransition = state?.level === 'sedentary_transition' || state?.activityProfile === 'sedentary';
+  const vdot = state?.currentVdot || 30.0;
+  const volume = state?.weeklyVolume || (isTransition ? 12 : 35);
   const p = prompt.toLowerCase();
+
+  if (isTransition && (p.includes("quando") || p.includes("teste") || p.includes("vdot") || p.includes("prova"))) {
+    return `### 🛡️ Transição Segura para o VDOT
+Como você está na fase de adaptação e alternando frações de corrida com caminhada:
+
+1. **Não faça um teste formal de 5k agora**: O VDOT clássico exige ritmo máximo contínuo. Fazer isso agora traria risco desnecessário de canelite ou sobrecarga nos joelhos.
+2. **Sua Meta Atual**: Concluir as 4 semanas do método Caminha-Corre (Run-Walk) em blocos de tempo (RPE 6/10).
+3. **Marco de Desbloqueio**: Quando você conseguir trotar de **2 km a 3 km de forma ininterrupta e confortável**, aí sim calibraremos seu primeiro VDOT oficial!`;
+  }
 
   if (p.includes("dor") || p.includes("lesão") || p.includes("canelite") || p.includes("joelho") || p.includes("aquiles")) {
     return `### 🩺 Análise Fisiológica de Desconforto & Protocolo de Carga
@@ -164,11 +183,12 @@ function generateLocalCoachAdvice(prompt: string, state: any): string {
 Identifiquei seu relato de sensibilidade física. Na metodologia Jack Daniels e medicina esportiva:
 
 1. **Ajuste Imediato de Carga**: Reduza o volume semanal atual (${volume} km) em **40%** nos próximos 4 a 6 dias.
-2. **Suspensão de Intensidades**: Interrompa imediatamente tiros em ritmo **I (Interval)** e **R (Repetição)**.
-3. **Zonas Permitidas**: Apenas treinos na **Zona E (Easy)** e **Z1 Karvonen**, em terreno plano e preferencialmente grama ou terra batida.
-4. **Crioterapia & Liberação**: Gelo por 15-20 minutos pós-treino e liberação miofascial com rolo nos gastrocnêmios e soleares.
-5. *Se a dor persistir em caminhadas normais, consulte um ortopedista ou fisioterapeuta do esporte antes de qualquer treino forte.*`;
+2. **Suspensão de Intensidades**: Interrompa imediatamente qualquer trote mais rápido e tiros.
+3. **Zonas Permitidas**: Apenas caminhada ativa regenerativa e repouso.
+4. **Crioterapia**: Gelo por 15-20 minutos pós-sessão nas canelas ou articulações doloridas.
+5. *Se a dor persistir mesmo caminhando, dê 2 dias de descanso total antes de tentar a próxima sessão.*`;
   }
+
 
   if (p.includes("tiro") || p.includes("intervalado") || p.includes("volume") || p.includes("limite")) {
     const maxTirosKm = (volume * 0.08).toFixed(1);

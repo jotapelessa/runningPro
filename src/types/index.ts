@@ -1,4 +1,45 @@
-export type RunnerLevel = 'beginner' | 'intermediate' | 'advanced';
+/**
+ * @graph-entity RunnerLevel
+ * @description Classificação do nível de condicionamento do atleta.
+ * Inclui 'sedentary_transition' para praticantes em fase de adaptação mecânica inicial.
+ */
+export type RunnerLevel = 'sedentary_transition' | 'beginner' | 'intermediate' | 'advanced';
+
+/**
+ * @graph-entity RunWalkInterval
+ * @description Estrutura de prescrição intervalada por tempo no método Caminha-Corre.
+ * @module runWalkEngine
+ */
+export interface RunWalkInterval {
+  reps: number;
+  runDurationSec: number;       // Ex: 60s trote
+  walkDurationSec: number;      // Ex: 120s caminhada
+  targetRpe: number;            // Escala Borg adaptada (1 a 10, alvo 6-7)
+  targetKarvonenZone?: 'Z1' | 'Z2';
+  warmupWalkSec: number;        // Padrão 300s (5 min)
+  cooldownWalkSec: number;      // Padrão 300s (5 min)
+  cues: {
+    runText: string;            // Ex: "Trote muito leve - ritmo de conversa"
+    walkText: string;           // Ex: "Caminhada rápida e firme de recuperação"
+  };
+}
+
+/**
+ * @graph-entity VdotReadiness
+ * @description Monitor de prontidão articular e cardiovascular rumo ao teste formal de VDOT.
+ * @module runWalkEngine
+ */
+export interface VdotReadiness {
+  currentStage: 'mechanical_adaptation' | 'aerobic_base' | 'vdot_ready';
+  stageTitle: string;
+  readinessPercentage: number;  // 0% a 100%
+  completedRunWalkWeeks: number;
+  continuousRunRecordSec: number; // Maior tempo contínuo sem parar
+  targetContinuousMeters: number; // Meta: 2.000m - 3.000m contínuos
+  painFreeDaysStreak: number;
+  unlockedVdot: boolean;
+  coachRecommendation: string;
+}
 
 export type DistanceType = 
   | '400m' 
@@ -59,6 +100,10 @@ export interface TestRecord {
   notes?: string;
 }
 
+/**
+ * @graph-entity RunnerState
+ * @description Estado global e perfil fisiológico do praticante no PaceLab VDOT.
+ */
 export interface RunnerState {
   macHR?: number;
   maxHr?: number;
@@ -92,7 +137,12 @@ export interface RunnerState {
   prRecords?: Partial<Record<DistanceType, number>>;
   history?: TestRecord[];
   pains?: PainReport[];
+  // Novos campos para a jornada de transição
+  activityProfile?: 'sedentary' | 'beginner' | 'intermediate' | 'advanced';
+  vdotReadiness?: VdotReadiness;
+  activePlanType?: 'run_walk_transition' | 'vdot_standard';
 }
+
 
 export interface RaceDistanceInfo {
   id: DistanceType;

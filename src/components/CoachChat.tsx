@@ -19,11 +19,15 @@ interface CoachChatProps {
 
 export const CoachChat: React.FC<CoachChatProps> = ({ runnerState }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const isTransitionUser = runnerState.level === 'sedentary_transition' || runnerState.activityProfile === 'sedentary';
+
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome-msg',
       role: 'assistant',
-      text: `👋 Olá, **${runnerState.name}**! Eu sou seu **Treinador IA PaceLab VDOT**.\n\nEstou calibrado com seu VDOT atual de **${runnerState.currentVdot.toFixed(1)}** e volume de **${runnerState.weeklyVolume} km/sem**.\n\nComo posso ajudar você com suas zonas de ritmo, progressão de carga ou prevenção de lesões hoje?`,
+      text: isTransitionUser
+        ? `👋 Olá, **${runnerState.name}**! Eu sou seu **Treinador IA PaceLab (Fisiologista de Transição)**.\n\nIdentifiquei que você está na **Fase de Adaptação Musculoesquelética** (método Caminha-Corre). Minha prioridade com você é **proteger seus tendões e articulações** e garantir que você evolua sem canelite e sem esgotamento.\n\nComo posso te orientar sobre seu trote leve, respiração ou dores hoje?`
+        : `👋 Olá, **${runnerState.name}**! Eu sou seu **Treinador IA PaceLab VDOT**.\n\nEstou calibrado com seu VDOT atual de **${runnerState.currentVdot.toFixed(1)}** e volume de **${runnerState.weeklyVolume} km/sem**.\n\nComo posso ajudar você com suas zonas de ritmo, progressão de carga ou prevenção de lesões hoje?`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     }
   ]);
@@ -31,13 +35,20 @@ export const CoachChat: React.FC<CoachChatProps> = ({ runnerState }) => {
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const quickChips = [
+  const quickChips = isTransitionUser ? [
+    'Como saber se meu trote está leve o suficiente?',
+    'Senti uma fisgada na canela ao alternar 250m',
+    'Posso fazer o caminha-corre na esteira ou na rua?',
+    'Quando estarei pronto para o teste formal de VDOT?',
+    'Qual a melhor postura e cadência curta para proteger o joelho?'
+  ] : [
     'Como distribuir meu volume semanal?',
     'Qual meu teto seguro de tiros (≤ 8%)?',
     'Estou sentindo dor na canela, o que fazer?',
     'Como respirar durante o Pace T (Limiar)?',
     'Estratégia de nutrição para 21k/42k'
   ];
+
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

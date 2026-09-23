@@ -264,7 +264,9 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
 
   // Handle Save
   const handleSave = () => {
-    const finalLevel: RunnerLevel = activityProfile === 'sedentary' || activityProfile === 'beginner' 
+    const finalLevel: RunnerLevel = activityProfile === 'sedentary' 
+      ? 'sedentary_transition' 
+      : activityProfile === 'beginner' 
       ? 'beginner' 
       : activityProfile === 'advanced' ? 'advanced' : 'intermediate';
 
@@ -273,6 +275,7 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
       : uploadedWorkouts.length === 1 
       ? `Arquivo: ${uploadedWorkouts[0].fileName}`
       : 'Ficha do Atleta';
+
 
     const updatedState: Partial<RunnerState> = {
       name,
@@ -712,11 +715,12 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
                   }}
                   className="w-full bg-[#0A0A0A] border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none"
                 >
-                  <option value="sedentary">Sedentário (Parado há meses / Iniciando do zero)</option>
-                  <option value="beginner">Iniciante em Adaptação (&lt; 6 semanas de treino)</option>
+                  <option value="sedentary">Sedentário / Retomando do Zero (Método Caminha-Corre & Proteção Articular)</option>
+                  <option value="beginner">Iniciante em Adaptação (Já corre alguns km contínuos)</option>
                   <option value="intermediate">Corredor Regular (6 a 24 semanas contínuas)</option>
                   <option value="advanced">Corredor Experiente / Avançado (&gt; 24 semanas)</option>
                 </select>
+
               </div>
 
               <div>

@@ -9,12 +9,15 @@ import {
   Sparkles, 
   CheckCircle2, 
   ShieldAlert,
+  ShieldCheck,
   HelpCircle,
   Award,
   Zap,
   User,
   Heart,
-  AlertTriangle
+  AlertTriangle,
+  HeartHandshake,
+  ArrowRight
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { DistanceType, RunnerState, TestRecord } from '../types';
@@ -27,6 +30,8 @@ import {
   formatPace, 
   formatTime 
 } from '../lib/vdotCalculator';
+import { calculateVdotReadiness } from '../lib/runWalkEngine';
+
 
 interface VdotCalculatorTabProps {
   runnerState: RunnerState;
@@ -41,7 +46,10 @@ export const VdotCalculatorTab: React.FC<VdotCalculatorTabProps> = ({
   onAddTestRecord,
   onOpenAthleteModal,
 }) => {
-  const isUncalibrated = runnerState.isCalibrated === false || (runnerState.currentVdot || 0) <= 0;
+  const isTransitionUser = runnerState.level === 'sedentary_transition' || runnerState.activityProfile === 'sedentary';
+  const isUncalibrated = !isTransitionUser && (runnerState.isCalibrated === false || (runnerState.currentVdot || 0) <= 0);
+  const readiness = calculateVdotReadiness(runnerState);
+
 
   // Test Input State
   const [selectedDistance, setSelectedDistance] = useState<DistanceType>('5k');
@@ -161,8 +169,63 @@ export const VdotCalculatorTab: React.FC<VdotCalculatorTabProps> = ({
 
   return (
     <div className="space-y-8 animate-fadeIn">
+      {/* Transition / Protective Banner for Run-Walk and Sedentary athletes */}
+      {isTransitionUser && (
+        <div className="p-5 rounded-2xl bg-gradient-to-r from-emerald-950/50 via-[#0E1A14] to-emerald-950/50 border border-emerald-500/40 shadow-xl shadow-emerald-500/10 space-y-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-11 h-11 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 flex-shrink-0 mt-0.5">
+                <ShieldCheck className="w-6 h-6 animate-pulse" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-base font-bold text-emerald-300 font-heading">
+                    {readiness.stageTitle}
+                  </span>
+                  <span className="text-[10px] uppercase font-mono-data bg-emerald-500/20 text-emerald-300 px-2.5 py-0.5 rounded font-bold">
+                    Proteção Fisiológica Ativa
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed max-w-3xl">
+                  O sistema VDOT tradicional de Jack Daniels é projetado para corrida contínua consolidada e começa no índice ~30 (5 km em ~30 min). 
+                  Para o seu estágio atual, <strong>fazer um teste all-out traria risco elevado de canelite e lesão de tendões</strong>. 
+                  Seu foco atual é acumular adaptação mecânica pelo método Caminha-Corre!
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-[#050505] p-3 rounded-xl border border-white/10 text-center min-w-[140px] flex-shrink-0">
+              <span className="text-[10px] text-slate-400 uppercase font-mono-data block">Prontidão VDOT</span>
+              <span className="text-2xl font-black font-mono-data text-emerald-400">{readiness.readinessPercentage}%</span>
+              <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden mt-1.5">
+                <div 
+                  className="h-full bg-emerald-400 rounded-full transition-all duration-500" 
+                  style={{ width: `${readiness.readinessPercentage}%` }} 
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-3 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 text-slate-300">
+              <Flame className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+              <span>{readiness.coachRecommendation}</span>
+            </div>
+            <button
+              onClick={() => {
+                onUpdateRunnerState({ level: 'beginner', isCalibrated: true, currentVdot: 32 });
+              }}
+              className="text-[11px] text-slate-400 hover:text-emerald-300 underline underline-offset-4 cursor-pointer whitespace-nowrap self-end sm:self-auto"
+            >
+              Já consigo correr 3 km contínuos (Desbloquear VDOT agora)
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Uncalibrated Status Banner */}
       {isUncalibrated && (
+
         <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-950/40 via-[#18110D] to-amber-950/40 border border-amber-500/40 shadow-lg shadow-amber-500/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-start gap-3.5">
             <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 flex-shrink-0 mt-0.5">

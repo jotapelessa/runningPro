@@ -11,31 +11,43 @@ import {
   ShieldAlert,
   Flame,
   Clock,
-  ArrowRight
+  ArrowRight,
+  Play,
+  HeartHandshake
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { DailyWorkout, TrainingPlan, TrainingWeek, RunnerState } from '../types';
 import { generateEightWeekPlan } from '../lib/planGenerator';
+import { generateRunWalkPlan, RUN_WALK_SCHEDULE } from '../lib/runWalkEngine';
+import { LiveRunWalkModal } from './LiveRunWalkModal';
 
 interface TrainingPlanTabProps {
   runnerState: RunnerState;
   currentPlan: TrainingPlan;
   onUpdatePlan: (newPlan: TrainingPlan) => void;
   onOpenAthleteModal: () => void;
+  onUpdateRunnerState?: (updatedFields: Partial<RunnerState>) => void;
 }
+
 
 export const TrainingPlanTab: React.FC<TrainingPlanTabProps> = ({
   runnerState,
   currentPlan,
   onUpdatePlan,
-  onOpenAthleteModal
+  onOpenAthleteModal,
+  onUpdateRunnerState
 }) => {
-  const isUncalibrated = runnerState.isCalibrated === false || (runnerState.currentVdot || 0) <= 0;
+  const isTransitionUser = runnerState.level === 'sedentary_transition' || runnerState.activityProfile === 'sedentary';
+  const isUncalibrated = !isTransitionUser && (runnerState.isCalibrated === false || (runnerState.currentVdot || 0) <= 0);
 
   const [activeWeekNum, setActiveWeekNum] = useState<number>(1);
   const [selectedGoal, setSelectedGoal] = useState<'5k' | '10k' | '21k' | '42k' | 'base'>(currentPlan.targetGoal || '10k');
   const [selectedFreq, setSelectedFreq] = useState<3 | 4 | 5 | 6>(currentPlan.weeklyFrequency || 4);
   const [loggingWorkoutId, setLoggingWorkoutId] = useState<string | null>(null);
+
+  // Live Run-Walk Modal state
+  const [isLiveModalOpen, setIsLiveModalOpen] = useState<boolean>(false);
+  const currentRunWalkConfig = RUN_WALK_SCHEDULE.find(s => s.weekNumber === activeWeekNum) || RUN_WALK_SCHEDULE[0];
 
   // Sync state when runnerState or currentPlan changes
   useEffect(() => {
@@ -81,20 +93,57 @@ export const TrainingPlanTab: React.FC<TrainingPlanTabProps> = ({
 
   // Generate a fresh plan
   const handleRegeneratePlan = () => {
-    const vdotToUse = runnerState.currentVdot > 0 ? runnerState.currentVdot : 38.0;
-    const newPlan = generateEightWeekPlan(
-      runnerState.name || 'Atleta PaceLab',
-      vdotToUse,
-      selectedGoal,
-      selectedFreq
-    );
-    onUpdatePlan(newPlan);
+    if (isTransitionUser) {
+      const rwPlan = generateRunWalkPlan(runnerState.name || 'Atleta em Transição', selectedFreq);
+      onUpdatePlan(rwPlan);
+    } else {
+      const vdotToUse = runnerState.currentVdot > 0 ? runnerState.currentVdot : 38.0;
+      const newPlan = generateEightWeekPlan(
+        runnerState.name || 'Atleta PaceLab',
+        vdotToUse,
+        selectedGoal,
+        selectedFreq
+      );
+      onUpdatePlan(newPlan);
+    }
     confetti({
       particleCount: 60,
       spread: 60,
       origin: { y: 0.6 }
     });
   };
+
+  const handleLiveSessionComplete = (summary: {
+    completedReps: number;
+    totalDurationMin: number;
+    rpe: number;
+    hasPain: boolean;
+    painLocation?: string;
+  }) => {
+    if (summary.hasPain && summary.painLocation && onUpdateRunnerState) {
+      const newPain = {
+        id: `pain-${Date.now()}`,
+        location: summary.painLocation,
+        severity: 'moderate' as const,
+        occurrence: 'during_run' as const,
+        date: new Date().toISOString().split('T')[0],
+        resolved: false,
+        notes: `Relatado no término do treino de Caminha-Corre Semana ${activeWeekNum}`
+      };
+      onUpdateRunnerState({
+        pains: [...(runnerState.pains || []), newPain]
+      });
+    }
+
+    // Auto mark the first uncompleted workout in current week as completed
+    if (currentPlan?.weeks) {
+      const targetDay = activeWeek.days.find(d => d.type !== 'REST' && !d.completed);
+      if (targetDay) {
+        handleToggleComplete(targetDay.id);
+      }
+    }
+  };
+
 
   // Toggle workout completion
   const handleToggleComplete = (workoutId: string) => {
@@ -194,6 +243,37 @@ export const TrainingPlanTab: React.FC<TrainingPlanTabProps> = ({
 
   return (
     <div className="space-y-6 animate-fadeIn">
+      {/* Transition Stage Banner for Sedentary / Run-Walk */}
+      {isTransitionUser && (
+        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-[#0D1812] to-emerald-950/40 border border-emerald-500/40 shadow-lg shadow-emerald-500/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 flex-shrink-0 mt-0.5">
+              <HeartHandshake className="w-5 h-5 animate-pulse" />
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-emerald-300 font-heading">
+                  Fase 0: Método Caminha-Corre (Run-Walk)
+                </span>
+                <span className="text-[10px] uppercase font-mono-data bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-bold">
+                  Adaptação Mecânica
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 leading-relaxed max-w-2xl">
+                Seu plano está calibrado em <strong>blocos de tempo por percepção de esforço (RPE 6/10)</strong> para proteger suas articulações, tendões e fáscias musculares antes de iniciar o motor VDOT contínuo.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setIsLiveModalOpen(true)}
+            className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs font-heading flex items-center gap-2 whitespace-nowrap shadow-lg shadow-emerald-500/25 transition-all cursor-pointer animate-bounce"
+          >
+            <Play className="w-3.5 h-3.5 fill-black" />
+            Iniciar Treino com Áudio
+          </button>
+        </div>
+      )}
+
       {/* Uncalibrated Status Banner */}
       {isUncalibrated && (
         <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-950/40 via-[#18110D] to-amber-950/40 border border-amber-500/40 shadow-lg shadow-amber-500/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -230,23 +310,22 @@ export const TrainingPlanTab: React.FC<TrainingPlanTabProps> = ({
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <div className="p-1.5 bg-[#FF4E00]/10 border border-[#FF4E00]/30 rounded-lg text-[#FF4E00]">
+              <div className={`p-1.5 rounded-lg ${isTransitionUser ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400' : 'bg-[#FF4E00]/10 border border-[#FF4E00]/30 text-[#FF4E00]'}`}>
                 <CalendarCheck className="w-4 h-4" />
               </div>
               <h2 className="text-base sm:text-lg font-bold font-heading text-white">
-                Periodização Científica de 8 Semanas PaceLab
+                {isTransitionUser ? 'Planilha de Transição Segura: Método Caminha-Corre' : 'Periodização Científica de 8 Semanas PaceLab'}
               </h2>
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400">
               <span>Atleta: <strong className="text-white">{runnerState.name || 'Atleta'}</strong></span>
               <span>•</span>
-              <span>VDOT Base: <strong className="text-[#FF4E00] font-mono-data">{runnerState.currentVdot > 0 ? runnerState.currentVdot.toFixed(1) : 'Zerado'}</strong></span>
+              <span>Modo: <strong className={isTransitionUser ? 'text-emerald-400' : 'text-[#FF4E00]'}>{isTransitionUser ? 'Transição 4 Semanas (Run-Walk)' : 'VDOT Avançado'}</strong></span>
               <span>•</span>
               <span>Frequência: <strong className="text-white">{runnerState.trainingDays || selectedFreq}x/semana</strong></span>
-              <span>•</span>
-              <span>Volume Cadastrado: <strong className="text-white">{runnerState.weeklyVolume || 0} km/semana</strong></span>
             </div>
           </div>
+
 
           {/* Quick Generator Controls */}
           <div className="flex flex-wrap items-center gap-3">
@@ -577,6 +656,16 @@ export const TrainingPlanTab: React.FC<TrainingPlanTabProps> = ({
           );
         })}
       </div>
+
+      {/* Live Audio Run-Walk Modal */}
+      <LiveRunWalkModal
+        isOpen={isLiveModalOpen}
+        onClose={() => setIsLiveModalOpen(false)}
+        intervalConfig={currentRunWalkConfig.interval}
+        weekNumber={activeWeekNum}
+        onCompleteSession={handleLiveSessionComplete}
+      />
     </div>
   );
 };
+
