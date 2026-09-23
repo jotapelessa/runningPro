@@ -9,7 +9,8 @@ import {
   Flame, 
   HeartHandshake, 
   Activity,
-  AlertCircle
+  AlertCircle,
+  Download
 } from 'lucide-react';
 import { ChatMessage, RunnerState, UserActivity } from '../types';
 
@@ -22,19 +23,55 @@ export const CoachChat: React.FC<CoachChatProps> = ({ runnerState, activities = 
   const [isOpen, setIsOpen] = useState(false);
   const isTransitionUser = runnerState.level === 'sedentary_transition' || runnerState.activityProfile === 'sedentary';
 
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: 'welcome-msg',
-      role: 'assistant',
-      text: isTransitionUser
-        ? `👋 Olá, **${runnerState.name}**! Eu sou seu **Treinador IA PaceLab (Fisiologista de Transição)**.\n\nIdentifiquei que você está na **Fase de Adaptação Musculoesquelética** (método Caminha-Corre). Minha prioridade com você é **proteger seus tendões e articulações** e garantir que você evolua sem canelite e sem esgotamento.\n\nComo posso te orientar sobre seu trote leve, respiração ou dores hoje?`
-        : `👋 Olá, **${runnerState.name}**! Eu sou seu **Treinador IA PaceLab VDOT**.\n\nEstou calibrado com seu VDOT atual de **${runnerState.currentVdot.toFixed(1)}**, volume de **${runnerState.weeklyVolume} km/sem** e acompanho suas atividades sincronizadas.\n\nComo posso ajudar você com suas zonas de ritmo, análise dos últimos treinos ou prevenção de lesões hoje?`,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  const defaultWelcomeText = isTransitionUser
+    ? `👋 Olá, **${runnerState.name}**! Eu sou seu **Treinador IA PaceLab (Fisiologista de Transição)**.\n\nIdentifiquei que você está na **Fase de Adaptação Musculoesquelética** (método Caminha-Corre). Minha prioridade com você é **proteger seus tendões e articulações** e garantir que você evolua sem canelite e sem esgotamento.\n\nComo posso te orientar sobre seu trote leve, respiração ou dores hoje?`
+    : `👋 Olá, **${runnerState.name}**! Eu sou seu **Treinador IA PaceLab VDOT**.\n\nEstou calibrado com seu VDOT atual de **${runnerState.currentVdot.toFixed(1)}**, volume de **${runnerState.weeklyVolume} km/sem** e acompanho suas atividades sincronizadas.\n\nComo posso ajudar você com suas zonas de ritmo, análise dos últimos treinos ou prevenção de lesões hoje?`;
+
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    try {
+      const saved = localStorage.getItem('pacelab_coach_history');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      // fallback
     }
-  ]);
+    return [
+      {
+        id: 'welcome-msg',
+        role: 'assistant',
+        text: defaultWelcomeText,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      }
+    ];
+  });
+
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Persist messages in localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('pacelab_coach_history', JSON.stringify(messages));
+    } catch {
+      // ignore storage errors
+    }
+  }, [messages]);
+
+  // Export prescription / conversation to Markdown
+  const handleExportMarkdown = () => {
+    const header = `# Prescrição & Diálogo - Treinador IA PaceLab VDOT\n**Atleta:** ${runnerState.name} | **VDOT:** ${runnerState.currentVdot.toFixed(1)} | **Data:** ${new Date().toLocaleDateString('pt-BR')}\n\n---\n\n`;
+    const body = messages.map(m => `### ${m.role === 'assistant' ? '🤖 Treinador IA' : '🏃 ' + (runnerState.name || 'Atleta')} (${m.timestamp})\n${m.text}\n`).join('\n');
+    const blob = new Blob([header + body], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `pacelab-orientacao-${runnerState.name.toLowerCase().replace(/\s+/g, '-')}-${new Date().toISOString().split('T')[0]}.md`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
 
   const quickChips = isTransitionUser ? [
     'Analise meus treinos recentes sincronizados',
@@ -205,6 +242,7 @@ export const CoachChat: React.FC<CoachChatProps> = ({ runnerState, activities = 
   };
 
   const handleReset = () => {
+    localStorage.removeItem('pacelab_coach_history');
     setMessages([
       {
         id: `welcome-${Date.now()}`,
@@ -256,17 +294,25 @@ export const CoachChat: React.FC<CoachChatProps> = ({ runnerState, activities = 
 
             <div className="flex items-center gap-1">
               <button
+                id="btn-export-coach-chat"
+                onClick={handleExportMarkdown}
+                title="Exportar orientação em Markdown"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-[#FF4E00] hover:bg-white/5 transition-colors cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+              </button>
+              <button
                 id="btn-reset-coach-chat"
                 onClick={handleReset}
                 title="Reiniciar conversa"
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
               </button>
               <button
                 id="btn-close-coach-chat"
                 onClick={() => setIsOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
