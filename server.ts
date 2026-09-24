@@ -30,12 +30,10 @@ function getGeminiClient(): GoogleGenAI | null {
 
 // 1. Health check endpoint
 app.get("/api/health", (req, res) => {
-  const tokenFileExists = fs.existsSync("/data/google_tokens.json") || fs.existsSync(path.join(process.cwd(), "google_tokens.json"));
   res.json({
     status: "ok",
     app: "PaceLab VDOT v3.6",
     aiEnabled: Boolean(process.env.GEMINI_API_KEY),
-    googleFitAuth: tokenFileExists,
     memoryUsageMb: Math.round(process.memoryUsage().rss / (1024 * 1024)),
     time: new Date().toISOString(),
   });
@@ -55,7 +53,7 @@ app.post("/api/coach", async (req, res) => {
 
     const isTransition = runnerState?.level === 'sedentary_transition' || runnerState?.activityProfile === 'sedentary';
 
-    // Format recent athlete activities (Google Fit / Amazfit / GPS)
+    // Format recent athlete activities (Intervals.icu / GPS)
     let recentActivitiesContext = "Nenhuma atividade recente registrada.";
     if (activities && Array.isArray(activities) && activities.length > 0) {
       recentActivitiesContext = activities.slice(0, 5).map((act: any, idx: number) => {
@@ -80,7 +78,7 @@ DADOS ATUAIS DO ATLETA:
 - Histórico de Dores Ativas: ${JSON.stringify(runnerState?.pains || [])}
 - Provas/Metas: ${runnerState?.goal || 'Retomar o condicionamento com segurança sem dor'}
 
-ÚLTIMOS TREINOS REAIS SINCRONIZADOS (Amazfit Zepp / Google Fit):
+ÚLTIMOS TREINOS REAIS SINCRONIZADOS (Intervals.icu):
 ${recentActivitiesContext}
 
 DIRETRIZES E REGRAS INVIOLÁVEIS DE PRESCRIÇÃO:
@@ -197,7 +195,7 @@ DADOS ATUAIS DO ATLETA:
 - Histórico de Dores Ativas: ${JSON.stringify(runnerState?.pains || [])}
 - Provas/Metas: ${runnerState?.goal || 'Retomar o condicionamento com segurança sem dor'}
 
-ÚLTIMOS TREINOS REAIS SINCRONIZADOS (Amazfit Zepp / Google Fit):
+ÚLTIMOS TREINOS REAIS SINCRONIZADOS (Intervals.icu):
 ${recentActivitiesContext}
 
 DIRETRIZES E REGRAS INVIOLÁVEIS DE PRESCRIÇÃO:
@@ -268,342 +266,7 @@ ${isTransition ? `3. DIRETRIZ FUNDAMENTAL PARA INICIANTES/SEDENTÁRIOS:
   }
 });
 
-// 3. Google OAuth & Fitness Endpoints (Server-Side)
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
 
-// Store athlete's Google tokens in persistent JSON file on disk
-const DATA_DIR = path.join(process.cwd(), 'data');
-if (!fs.existsSync(DATA_DIR)) {
-  try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) {}
-}
-const TOKENS_FILE = path.join(DATA_DIR, 'google_tokens.json');
-let athleteGoogleTokens: { access_token?: string; refresh_token?: string; expiry_date?: number; email?: string } = {};
-
-try {
-  if (fs.existsSync(TOKENS_FILE)) {
-    athleteGoogleTokens = JSON.parse(fs.readFileSync(TOKENS_FILE, 'utf-8'));
-  }
-} catch (e) {
-  console.warn('Could not read persistent tokens file:', e);
-}
-
-function saveGoogleTokens(tokens: typeof athleteGoogleTokens) {
-  athleteGoogleTokens = tokens;
-  try {
-    fs.writeFileSync(TOKENS_FILE, JSON.stringify(tokens, null, 2), 'utf-8');
-  } catch (e) {
-    console.error('Error saving persistent tokens file:', e);
-  }
-}
-
-// 3.1 Generate Google Auth URL with oob / manual authorization code support
-app.get("/api/auth/google/url", (req, res) => {
-  const scopes = [
-    'https://www.googleapis.com/auth/userinfo.email',
-    'https://www.googleapis.com/auth/userinfo.profile',
-    'https://www.googleapis.com/auth/fitness.activity.read',
-    'https://www.googleapis.com/auth/fitness.location.read',
-    'https://www.googleapis.com/auth/fitness.body.read'
-  ].join(' ');
-
-  // Default to http://localhost:3005 for Google Web Client OAuth
-  const redirectUri = (req.query.redirectUri as string) || 'http://localhost:3005';
-
-  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-    `client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}` +
-    `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-    `&response_type=code` +
-    `&scope=${encodeURIComponent(scopes)}` +
-    `&access_type=offline` +
-    `&prompt=consent`;
-
-  res.json({ url: authUrl, clientId: GOOGLE_CLIENT_ID, redirectUri });
-});
-
-// 3.2 Exchange Authorization Code for Refresh Token & Access Token
-app.post("/api/auth/google/exchange", async (req, res) => {
-  try {
-    const { code, redirectUri } = req.body;
-    if (!code) {
-      return res.status(400).json({ error: "Código de autorização não informado." });
-    }
-
-    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        code: code.trim(),
-        client_id: GOOGLE_CLIENT_ID,
-        client_secret: GOOGLE_CLIENT_SECRET,
-        redirect_uri: redirectUri || 'http://localhost:3005',
-        grant_type: "authorization_code"
-      })
-    });
-
-    const tokenData = await tokenResponse.json();
-    if (!tokenResponse.ok) {
-      console.error("Google Token Exchange error:", tokenData);
-      return res.status(tokenResponse.status).json({ 
-        error: tokenData.error_description || tokenData.error || "Falha na troca do código OAuth." 
-      });
-    }
-
-    // Get user info
-    let userEmail = 'Atleta Google';
-    let userName = 'Atleta';
-    try {
-      const userInfoRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
-        headers: { Authorization: `Bearer ${tokenData.access_token}` }
-      });
-      if (userInfoRes.ok) {
-        const userInfo = await userInfoRes.json();
-        userEmail = userInfo.email || userEmail;
-        userName = userInfo.name || userName;
-      }
-    } catch (e) {
-      console.warn("Could not fetch user profile details:", e);
-    }
-
-    saveGoogleTokens({
-      access_token: tokenData.access_token,
-      refresh_token: tokenData.refresh_token,
-      expiry_date: Date.now() + (tokenData.expires_in || 3600) * 1000,
-      email: userEmail
-    });
-
-    return res.json({
-      success: true,
-      email: userEmail,
-      name: userName,
-      hasRefreshToken: Boolean(tokenData.refresh_token)
-    });
-  } catch (error: any) {
-    console.error("Exchange endpoint error:", error);
-    res.status(500).json({ error: error?.message || "Erro interno no servidor." });
-  }
-});
-
-// 3.3 Fetch Google Fitness Activities & Sessions
-app.get("/api/fitness/activities", async (req, res) => {
-  try {
-    if (!athleteGoogleTokens.access_token) {
-      return res.status(401).json({ error: "Nenhuma conta Google conectada no backend." });
-    }
-
-    // If access token is expired and we have refresh token, refresh it
-    if (athleteGoogleTokens.expiry_date && Date.now() > athleteGoogleTokens.expiry_date && athleteGoogleTokens.refresh_token) {
-      const refreshRes = await fetch("https://oauth2.googleapis.com/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          refresh_token: athleteGoogleTokens.refresh_token,
-          client_id: GOOGLE_CLIENT_ID,
-          client_secret: GOOGLE_CLIENT_SECRET,
-          grant_type: "refresh_token"
-        })
-      });
-      if (refreshRes.ok) {
-        const refreshData = await refreshRes.json();
-        saveGoogleTokens({
-          ...athleteGoogleTokens,
-          access_token: refreshData.access_token,
-          expiry_date: Date.now() + (refreshData.expires_in || 3600) * 1000
-        });
-      }
-    }
-
-    // Call Google Fitness REST API Sessions endpoint
-    const now = Date.now();
-    const oneMonthAgo = now - 30 * 24 * 60 * 60 * 1000;
-    const tomorrow = now + 24 * 60 * 60 * 1000; // 1 day in future to avoid clock skew dropping recent sessions
-    const fitnessUrl = `https://fitness.googleapis.com/fitness/v1/users/me/sessions?startTime=${new Date(oneMonthAgo).toISOString()}&endTime=${new Date(tomorrow).toISOString()}`;
-
-    const fitResponse = await fetch(fitnessUrl, {
-      headers: { Authorization: `Bearer ${athleteGoogleTokens.access_token}` }
-    });
-
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-
-    if (!fitResponse.ok) {
-      const errData = await fitResponse.json();
-      return res.status(fitResponse.status).json({ error: errData.error?.message || "Erro ao consultar Google Fitness." });
-    }
-
-    const fitData = await fitResponse.json();
-    const rawSessions: any[] = fitData.session || [];
-
-    // Sort descending so the latest sessions (today, now) appear FIRST
-    rawSessions.sort((a, b) => {
-      const timeA = parseInt(a.startTimeMillis || "0", 10);
-      const timeB = parseInt(b.startTimeMillis || "0", 10);
-      return timeB - timeA;
-    });
-
-    // Enrich top 35 recent sessions with location (GPS), distance and calories datasets
-    const enrichedSessions = await Promise.all(
-      rawSessions.slice(0, 35).map(async (sess: any) => {
-        try {
-          const startNano = `${sess.startTimeMillis}000000`;
-          const endNano = `${sess.endTimeMillis}000000`;
-
-          // Query GPS Location sample dataset
-          const locUrl = `https://fitness.googleapis.com/fitness/v1/users/me/dataSources/derived:com.google.location.sample:com.google.android.gms:merge_location_samples/datasets/${startNano}-${endNano}`;
-          const locRes = await fetch(locUrl, {
-            headers: { Authorization: `Bearer ${athleteGoogleTokens.access_token}` }
-          });
-
-          let routePoints: Array<{ lat: number; lng: number; ele?: number; time?: string; speed?: number }> = [];
-
-          if (locRes.ok) {
-            const locData = await locRes.json();
-            if (Array.isArray(locData.point)) {
-              routePoints = locData.point
-                .map((pt: any) => {
-                  const latVal = pt.value?.[0]?.fpVal;
-                  const lngVal = pt.value?.[1]?.fpVal;
-                  const eleVal = pt.value?.[3]?.fpVal;
-                  const timeMs = Math.round(parseInt(pt.startTimeNanos || "0", 10) / 1000000);
-                  if (typeof latVal === "number" && typeof lngVal === "number") {
-                    return {
-                      lat: latVal,
-                      lng: lngVal,
-                      ele: typeof eleVal === "number" ? Math.round(eleVal) : undefined,
-                      time: timeMs > 0 ? new Date(timeMs).toISOString() : undefined,
-                    };
-                  }
-                  return null;
-                })
-                .filter(Boolean);
-            }
-          }
-
-          // Query Distance datasets (Google derived + Amazfit Huami raw)
-          let exactDistanceMeters = 0;
-          const distanceSources = [
-            "derived:com.google.distance.delta:com.google.android.gms:merge_distance_deltas",
-            "raw:com.google.distance.delta:com.huami.watch.hmwatchmanager:fitness_record_distance",
-            "raw:com.google.distance.delta:com.huami.watch.hmwatchmanager:activity_distance_data_source"
-          ];
-
-          for (const dSource of distanceSources) {
-            try {
-              const distUrl = `https://fitness.googleapis.com/fitness/v1/users/me/dataSources/${encodeURIComponent(dSource)}/datasets/${startNano}-${endNano}`;
-              const distRes = await fetch(distUrl, {
-                headers: { Authorization: `Bearer ${athleteGoogleTokens.access_token}` }
-              });
-              if (distRes.ok) {
-                const distData = await distRes.json();
-                if (Array.isArray(distData.point) && distData.point.length > 0) {
-                  let dSum = 0;
-                  distData.point.forEach((pt: any) => {
-                    const d = pt.value?.[0]?.fpVal;
-                    if (typeof d === "number") dSum += d;
-                  });
-                  if (dSum > 0) {
-                    exactDistanceMeters = dSum;
-                    break; // Found reliable distance
-                  }
-                }
-              }
-            } catch {
-              // try next distance stream
-            }
-          }
-
-          // Query Calories dataset (Google derived + Amazfit Huami)
-          let exactCalories: number | undefined;
-          const calSources = [
-            "raw:com.google.calories.expended:com.huami.watch.hmwatchmanager:fitness_record_calories",
-            "derived:com.google.calories.expended:com.google.android.gms:merge_calories_expended"
-          ];
-          for (const cSource of calSources) {
-            try {
-              const calUrl = `https://fitness.googleapis.com/fitness/v1/users/me/dataSources/${encodeURIComponent(cSource)}/datasets/${startNano}-${endNano}`;
-              const calRes = await fetch(calUrl, {
-                headers: { Authorization: `Bearer ${athleteGoogleTokens.access_token}` }
-              });
-              if (calRes.ok) {
-                const calData = await calRes.json();
-                if (Array.isArray(calData.point) && calData.point.length > 0) {
-                  let cSum = 0;
-                  calData.point.forEach((pt: any) => {
-                    const c = pt.value?.[0]?.fpVal;
-                    if (typeof c === "number") cSum += c;
-                  });
-                  if (cSum > 0) {
-                    exactCalories = Math.round(cSum);
-                    break;
-                  }
-                }
-              }
-            } catch {
-              // ignore
-            }
-          }
-
-          // Query Heart Rate dataset
-          let avgHeartRate: number | undefined;
-          try {
-            const hrUrl = `https://fitness.googleapis.com/fitness/v1/users/me/dataSources/derived:com.google.heart_rate.bpm:com.google.android.gms:merge_heart_rate_bpm/datasets/${startNano}-${endNano}`;
-            const hrRes = await fetch(hrUrl, {
-              headers: { Authorization: `Bearer ${athleteGoogleTokens.access_token}` }
-            });
-            if (hrRes.ok) {
-              const hrData = await hrRes.json();
-              if (Array.isArray(hrData.point) && hrData.point.length > 0) {
-                let sumHr = 0;
-                let countHr = 0;
-                hrData.point.forEach((pt: any) => {
-                  const h = pt.value?.[0]?.fpVal;
-                  if (typeof h === "number" && h > 40 && h < 240) {
-                    sumHr += h;
-                    countHr++;
-                  }
-                });
-                if (countHr > 0) avgHeartRate = Math.round(sumHr / countHr);
-              }
-            }
-          } catch {
-            // hr fallback
-          }
-
-          // Intelligent naming for unnamed sessions
-          let friendlyName = sess.name;
-          if (!friendlyName || friendlyName.trim() === "") {
-            if (sess.activityType === 8) friendlyName = "Corrida • Amazfit";
-            else if (sess.activityType === 7) friendlyName = "Caminhada • Amazfit";
-            else if (sess.activityType === 108) friendlyName = "Treino Físico • Amazfit";
-            else friendlyName = "Atividade • Amazfit";
-          }
-
-          return {
-            ...sess,
-            name: friendlyName,
-            routePoints,
-            exactDistanceMeters: exactDistanceMeters > 0 ? Math.round(exactDistanceMeters) : undefined,
-            exactCalories,
-            avgHeartRate
-          };
-        } catch (enrichErr) {
-          console.warn(`Failed to enrich session ${sess.id}:`, enrichErr);
-          return sess;
-        }
-      })
-    );
-
-    return res.json({
-      success: true,
-      sessions: enrichedSessions,
-      email: athleteGoogleTokens.email
-    });
-  } catch (error: any) {
-    console.error("Fitness fetch error:", error);
-    res.status(500).json({ error: error?.message || "Falha ao puxar sessões do Google Fit." });
-  }
-});
 
 // 4. Race Scraper / Catalog Search endpoint
 app.post("/api/scrape-races", async (req, res) => {

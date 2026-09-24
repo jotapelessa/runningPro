@@ -236,32 +236,7 @@ export const ActivitiesTab: React.FC<ActivitiesTabProps> = ({
 
   return (
     <div className="space-y-6 animate-fadeIn">
-      {/* Top Banner & KPI Ribbon */}
-      <div className="telemetry-card rounded-2xl p-5 border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="p-1.5 bg-[#FF4E00]/10 border border-[#FF4E00]/30 rounded-lg text-[#FF4E00]">
-              <ActivityIcon className="w-4 h-4" />
-            </div>
-            <h2 className="text-base sm:text-lg font-bold font-heading text-white">
-              Histórico Centralizado de Atividades Físicas
-            </h2>
-          </div>
-          <p className="text-xs text-slate-400">
-            Mapeamento de treinos manuais e sincronização com Intervals.icu
-          </p>
-        </div>
 
-        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-          <button
-            onClick={() => setIsManualModalOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#FF4E00] hover:bg-[#E03E00] text-white font-bold text-xs font-heading shadow-md shadow-[#FF4E00]/25 transition-all cursor-pointer whitespace-nowrap"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Nova Atividade Manual</span>
-          </button>
-        </div>
-      </div>
 
       {/* Aggregate KPI Badges */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono-data">

@@ -92,7 +92,8 @@ export async function fetchIntervalsActivities(
 
   const response = await fetch(`${BASE_URL}/athlete/${targetId}/activities?${query.toString()}`, {
     method: 'GET',
-    headers: getAuthHeaders(athleteId, apiKey)
+    headers: getAuthHeaders(athleteId, apiKey),
+    cache: 'no-cache'
   });
 
   if (!response.ok) {
