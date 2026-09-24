@@ -170,12 +170,13 @@ export function generateRunWalkPlan(
       }
     }
 
+    const activeCount = targetActiveDays.length;
     return {
       weekNumber: cfg.weekNumber,
       phase: cfg.phase,
       phaseCode: 'base',
       focus: cfg.focus,
-      totalKm: Math.round(cfg.estimatedVolumeKm * (trainingDaysPerWeek <= 3 ? 3 : 4) * 10) / 10,
+      totalKm: Math.round(cfg.estimatedVolumeKm * activeCount * 10) / 10,
       targetTss: 40 + (cfg.weekNumber * 5),
       days
     };
@@ -188,7 +189,7 @@ export function generateRunWalkPlan(
     createdAt: new Date().toISOString(),
     vdot: 30, // Marcador base simbólico
     targetGoal: 'base',
-    weeklyFrequency: (trainingDaysPerWeek <= 3 ? 3 : 4) as any,
+    weeklyFrequency: targetActiveDays.length as any,
     weeks
   };
 }

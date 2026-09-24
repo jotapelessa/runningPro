@@ -261,27 +261,27 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
   const [activeTab, setActiveTab] = useState<'biometria' | 'fisiologia' | 'integracoes' | 'prescricao'>('biometria');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-md overflow-hidden">
       <div 
         id="modal-athlete-profile"
-        className="relative w-full max-w-3xl bg-[#0A0A0A] border border-[#FF4E00]/30 rounded-2xl shadow-2xl shadow-black overflow-hidden my-6 flex flex-col max-h-[90vh] animate-fadeIn"
+        className="relative w-full max-w-4xl bg-[#0A0A0A] border border-[#FF4E00]/30 rounded-2xl shadow-2xl shadow-black overflow-hidden flex flex-col h-[94vh] sm:h-auto sm:max-h-[90vh] animate-fadeIn"
       >
         {/* Header */}
-        <div className="bg-gradient-to-r from-[#140E0B] via-[#0D0D0F] to-[#140E0B] border-b border-white/10 px-6 py-4 flex items-center justify-between shrink-0">
+        <div className="bg-gradient-to-r from-[#140E0B] via-[#0D0D0F] to-[#140E0B] border-b border-white/10 px-5 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#FF4E00]/10 border border-[#FF4E00]/30 flex items-center justify-center text-[#FF4E00]">
-              <User className="w-5 h-5" />
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#FF4E00]/10 border border-[#FF4E00]/30 flex items-center justify-center text-[#FF4E00] shrink-0">
+              <User className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base sm:text-lg font-bold text-white font-heading">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-sm sm:text-base md:text-lg font-bold text-white font-heading">
                   Ficha Completa do Atleta & Calibração Fisiológica
                 </h3>
-                <span className="text-[10px] uppercase font-mono-data bg-[#FF4E00]/20 text-[#FF4E00] px-2 py-0.5 rounded font-bold border border-[#FF4E00]/30">
+                <span className="text-[9px] sm:text-[10px] uppercase font-mono-data bg-[#FF4E00]/20 text-[#FF4E00] px-2 py-0.5 rounded font-bold border border-[#FF4E00]/30">
                   Motor Daniels & Karvonen
                 </span>
               </div>
-              <p className="text-xs text-slate-400">
+              <p className="text-[11px] sm:text-xs text-slate-400">
                 Configure biometria, sedentarismo, rotina e avalie seu diagnóstico exato.
               </p>
             </div>
@@ -297,7 +297,7 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
         </div>
 
         {/* Tab Navigation Bar */}
-        <div className="flex border-b border-white/10 bg-[#0F0F11] px-6 gap-2 shrink-0 overflow-x-auto">
+        <div className="flex border-b border-white/10 bg-[#0F0F11] px-4 sm:px-6 gap-2 shrink-0 overflow-x-auto no-scrollbar">
           <button
             type="button"
             onClick={() => setActiveTab('biometria')}
@@ -351,8 +351,8 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
           </button>
         </div>
 
-        {/* Modal Body */}
-        <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-6">
+        {/* Modal Body with smooth custom scrollbar */}
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-6 overscroll-contain">
           {/* TAB 1: Biometria & Atividade */}
           {activeTab === 'biometria' && (
             <div className="space-y-6 animate-fadeIn">
@@ -895,7 +895,7 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="bg-[#121214] border-t border-white/10 px-6 py-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="bg-[#121214] border-t border-white/10 px-4 sm:px-6 py-3 sm:py-4 flex flex-wrap items-center justify-between gap-3 shrink-0">
           {onOpenResetModal ? (
             <button
               id="btn-athlete-modal-reset"
@@ -904,28 +904,28 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
                 onClose();
                 onOpenResetModal();
               }}
-              className="px-3.5 py-2 rounded-xl bg-red-950/30 hover:bg-red-900/50 border border-red-500/30 text-red-300 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="px-3 py-2 rounded-xl bg-red-950/30 hover:bg-red-900/50 border border-red-500/30 text-red-300 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5 text-red-400" />
               <span>Zerar Dados & Estatísticas</span>
             </button>
           ) : <div />}
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 ml-auto">
             <button
               id="btn-cancel-athlete-modal"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
+              className="px-3.5 sm:px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
             >
               Cancelar
             </button>
             <button
               id="btn-save-athlete-modal"
               onClick={handleSave}
-              className="px-6 py-2.5 rounded-xl bg-[#FF4E00] hover:bg-[#E03E00] text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-[#FF4E00]/30 transition-all cursor-pointer"
+              className="px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl bg-[#FF4E00] hover:bg-[#E03E00] text-white text-xs font-bold flex items-center gap-1.5 sm:gap-2 shadow-lg shadow-[#FF4E00]/30 transition-all cursor-pointer whitespace-nowrap"
             >
               <Check className="w-4 h-4" />
-              Salvar Perfil & Aplicar Prescrição ao Treino
+              <span>Salvar Perfil & Aplicar</span>
             </button>
           </div>
         </div>

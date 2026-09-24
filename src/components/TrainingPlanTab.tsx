@@ -637,12 +637,35 @@ export const TrainingPlanTab: React.FC<TrainingPlanTabProps> = ({
                           trainingDays: nextPref.length
                         });
                       }
-                      // Auto-regenerate plan with new preferred days
+                      // Auto-regenerate plan with new preferred days preserving already completed days
                       const updatedRwPlan = generateRunWalkPlan(
                         runnerState.name || 'Atleta em Transição',
                         nextPref.length,
                         nextPref
                       );
+
+                      if (currentPlan?.weeks) {
+                        const completedMap = new Map<string, any>();
+                        currentPlan.weeks.forEach(w => {
+                          w.days.forEach(d => {
+                            if (d.completed) completedMap.set(`${w.weekNumber}-${d.dayIndex}`, d);
+                          });
+                        });
+
+                        updatedRwPlan.weeks.forEach(w => {
+                          w.days.forEach(d => {
+                            const prev = completedMap.get(`${w.weekNumber}-${d.dayIndex}`);
+                            if (prev) {
+                              d.completed = true;
+                              d.completedPace = prev.completedPace;
+                              d.completedHr = prev.completedHr;
+                              d.rpe = prev.rpe;
+                              d.uploadedFile = prev.uploadedFile;
+                            }
+                          });
+                        });
+                      }
+
                       onUpdatePlan(updatedRwPlan);
                     }}
                     className={`px-2.5 py-1 rounded-lg text-xs font-bold font-mono-data transition-all cursor-pointer ${
@@ -849,19 +872,40 @@ export const TrainingPlanTab: React.FC<TrainingPlanTabProps> = ({
                   )}
                 </div>
 
-                {/* Completed Details pill if logged */}
-                {workout.completed && (workout.completedPace || workout.rpe || workout.uploadedFile) && (
-                  <div className="bg-emerald-950/50 border border-emerald-500/30 p-2 rounded-lg text-[10px] font-mono-data text-emerald-300 mb-2 space-y-0.5">
+                {/* Completed Details & Intervals.icu Comparison pill */}
+                {workout.completed && (
+                  <div className="bg-emerald-950/60 border border-emerald-500/40 p-2.5 rounded-xl text-[10px] font-mono-data text-emerald-300 mb-2 space-y-1.5 shadow-sm">
                     {workout.uploadedFile && (
-                      <div className="text-white font-bold flex items-center gap-1 mb-1 pb-1 border-b border-emerald-500/20">
-                        <Watch className="w-3 h-3 text-emerald-400" />
-                        <span className="truncate">{workout.uploadedFile.fileName}</span>
+                      <div className="text-white font-bold flex items-center justify-between gap-1 pb-1 border-b border-emerald-500/20">
+                        <div className="flex items-center gap-1 truncate">
+                          <Watch className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                          <span className="truncate">{workout.uploadedFile.fileName}</span>
+                        </div>
+                        <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded uppercase font-black">
+                          Sincronizado
+                        </span>
                       </div>
                     )}
-                    {workout.completedPace && <div>Pace Real: <strong>{workout.completedPace}</strong></div>}
-                    {workout.completedHr && <div>FC Média: <strong>{workout.completedHr} bpm</strong></div>}
-                    {workout.uploadedFile?.distanceKm && <div>Distância GPS: <strong>{workout.uploadedFile.distanceKm} km</strong></div>}
-                    {workout.rpe && <div>Percepção (RPE): <strong>{workout.rpe}/10</strong></div>}
+
+                    {/* Comparativo Prescrito vs Real */}
+                    {workout.uploadedFile?.distanceKm ? (
+                      <div className="grid grid-cols-2 gap-2 bg-black/40 p-1.5 rounded-lg border border-white/5">
+                        <div>
+                          <span className="text-slate-400 block text-[9px] uppercase">Prescrito:</span>
+                          <span className="text-white font-bold">{workout.totalKm > 0 ? `${workout.totalKm} km` : 'Livre'}</span>
+                        </div>
+                        <div>
+                          <span className="text-emerald-400 block text-[9px] uppercase">Realizado:</span>
+                          <span className="text-emerald-300 font-bold">{workout.uploadedFile.distanceKm} km</span>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px]">
+                      {workout.completedPace && <div>Pace Real: <strong className="text-white">{workout.completedPace}</strong></div>}
+                      {workout.completedHr && <div>FC: <strong className="text-white">{workout.completedHr} bpm</strong></div>}
+                      {workout.rpe && <div>RPE: <strong className="text-amber-400">{workout.rpe}/10</strong></div>}
+                    </div>
                   </div>
                 )}
 

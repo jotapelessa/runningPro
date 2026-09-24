@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { RunnerState, DailyRecoveryCheckin, TestRecord, TrainingPlan, AppTab, ParsedWorkout, UserActivity } from './types';
+import { RunnerState, DailyRecoveryCheckin, TestRecord, TrainingPlan, TrainingWeek, DailyWorkout, AppTab, ParsedWorkout, UserActivity } from './types';
 import { 
   loadRunnerState, 
   saveRunnerState, 
@@ -14,6 +14,7 @@ import {
 } from './lib/storage';
 import { loadUserActivities, saveUserActivities, deduplicateOrMergeActivity } from './lib/activitiesStorage';
 import { generateEightWeekPlan } from './lib/planGenerator';
+import { generateRunWalkPlan } from './lib/runWalkEngine';
 import { reconcilePlanWithActivities, calibrateRunnerFromActivities } from './lib/planReconciler';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
@@ -128,35 +129,91 @@ export default function App() {
 
   // Sync to local storage
   const handleUpdateRunnerState = (updatedFields: Partial<RunnerState>) => {
+    let nextState: RunnerState = runnerState;
     setRunnerState(prev => {
       const next = { ...prev, ...updatedFields };
+      nextState = next;
       saveRunnerState(next);
       return next;
     });
 
-    // We use the updated fields merged with current state (which we can approximate since it's synchronous logic)
-    // Actually, to be safe from stale closures, we can just queue the plan update based on the latest state
-    // but the easiest is to compute next here.
-    const nextState = { ...runnerState, ...updatedFields };
+    const isTransition = nextState.level === 'sedentary_transition' || nextState.activityProfile === 'sedentary';
 
+    // Only regenerate plan if critical parameters changed
     if (
       updatedFields.currentVdot !== undefined || 
       updatedFields.trainingDays !== undefined || 
       updatedFields.targetRaceDistance !== undefined ||
+      updatedFields.level !== undefined ||
+      updatedFields.preferredDaysOfWeek !== undefined ||
       updatedFields.name !== undefined
     ) {
-      const validGoal = (['5k', '10k', '21k', '42k', 'base'].includes(nextState.targetRaceDistance as any)
-        ? nextState.targetRaceDistance
-        : '10k') as '5k' | '10k' | '21k' | '42k' | 'base';
+      if (isTransition) {
+        // Gera ou ajusta plano de transição Caminha-Corre
+        const updatedRwPlan = generateRunWalkPlan(
+          nextState.name || 'Atleta em Transição',
+          nextState.trainingDays || 3,
+          nextState.preferredDaysOfWeek
+        );
 
-      const updatedPlan = generateEightWeekPlan(
-        nextState.name || 'Corredor PaceLab',
-        nextState.currentVdot && nextState.currentVdot > 0 ? nextState.currentVdot : 40.0,
-        validGoal,
-        (nextState.trainingDays && nextState.trainingDays >= 3 && nextState.trainingDays <= 6 ? nextState.trainingDays : 4) as 3 | 4 | 5 | 6
-      );
-      setPlan(updatedPlan);
-      saveTrainingPlan(updatedPlan);
+        // Preserva status de dias já concluídos no plano anterior
+        if (plan?.weeks) {
+          const completedMap = new Map<string, boolean>();
+          plan.weeks.forEach((w: TrainingWeek) => {
+            w.days.forEach((d: DailyWorkout) => {
+              if (d.completed) completedMap.set(`${w.weekNumber}-${d.dayIndex}`, true);
+            });
+          });
+
+          updatedRwPlan.weeks.forEach((w: TrainingWeek) => {
+            w.days.forEach((d: DailyWorkout) => {
+              if (completedMap.has(`${w.weekNumber}-${d.dayIndex}`)) {
+                d.completed = true;
+              }
+            });
+          });
+        }
+
+        setPlan(updatedRwPlan);
+        saveTrainingPlan(updatedRwPlan);
+      } else {
+        const validGoal = (['5k', '10k', '21k', '42k', 'base'].includes(nextState.targetRaceDistance as any)
+          ? nextState.targetRaceDistance
+          : '10k') as '5k' | '10k' | '21k' | '42k' | 'base';
+
+        const updatedPlan = generateEightWeekPlan(
+          nextState.name || 'Corredor PaceLab',
+          nextState.currentVdot && nextState.currentVdot > 0 ? nextState.currentVdot : 40.0,
+          validGoal,
+          (nextState.trainingDays && nextState.trainingDays >= 3 && nextState.trainingDays <= 6 ? nextState.trainingDays : 4) as 3 | 4 | 5 | 6
+        );
+
+        // Preserva status de treinos já completados
+        if (plan?.weeks) {
+          const completedMap = new Map<string, DailyWorkout>();
+          plan.weeks.forEach((w: TrainingWeek) => {
+            w.days.forEach((d: DailyWorkout) => {
+              if (d.completed) completedMap.set(`${w.weekNumber}-${d.dayIndex}`, d);
+            });
+          });
+
+          updatedPlan.weeks.forEach((w: TrainingWeek) => {
+            w.days.forEach((d: DailyWorkout) => {
+              const prev = completedMap.get(`${w.weekNumber}-${d.dayIndex}`);
+              if (prev) {
+                d.completed = true;
+                d.completedPace = prev.completedPace;
+                d.completedHr = prev.completedHr;
+                d.rpe = prev.rpe;
+                d.uploadedFile = prev.uploadedFile;
+              }
+            });
+          });
+        }
+
+        setPlan(updatedPlan);
+        saveTrainingPlan(updatedPlan);
+      }
     }
   };
 
