@@ -49,7 +49,7 @@ export const AdaptationCalendar: React.FC<AdaptationCalendarProps> = ({
 
   // Current calendar view date state
   const [currentDate, setCurrentDate] = useState(() => new Date());
-  const [viewMode, setViewMode] = useState<'month' | 'week'>('month');
+  const [viewMode, setViewMode] = useState<'week' | 'month'>('week');
   const [selectedDateStr, setSelectedDateStr] = useState<string>(() => {
     return new Date().toISOString().split('T')[0];
   });
@@ -88,15 +88,50 @@ export const AdaptationCalendar: React.FC<AdaptationCalendarProps> = ({
     }
   };
 
-
-
-  const handlePrevMonth = () => {
-    setCurrentDate(new Date(year, month - 1, 1));
+  // Navigation handlers for week and month
+  const handlePrev = () => {
+    if (viewMode === 'week') {
+      const prevWeek = new Date(currentDate);
+      prevWeek.setDate(prevWeek.getDate() - 7);
+      setCurrentDate(prevWeek);
+    } else {
+      setCurrentDate(new Date(year, month - 1, 1));
+    }
   };
 
-  const handleNextMonth = () => {
-    setCurrentDate(new Date(year, month + 1, 1));
+  const handleNext = () => {
+    if (viewMode === 'week') {
+      const nextWeek = new Date(currentDate);
+      nextWeek.setDate(nextWeek.getDate() + 7);
+      setCurrentDate(nextWeek);
+    } else {
+      setCurrentDate(new Date(year, month + 1, 1));
+    }
   };
+
+  // Helper to get 7 days of the currently focused week
+  const weekDays = React.useMemo(() => {
+    const d = new Date(currentDate);
+    const dayOfWeek = d.getDay(); // 0 is Sunday
+    // Start week on Monday (1) or Sunday (0). Let's start Monday:
+    const diff = d.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+    const monday = new Date(d.setDate(diff));
+
+    return Array.from({ length: 7 }).map((_, i) => {
+      const day = new Date(monday);
+      day.setDate(monday.getDate() + i);
+      const y = day.getFullYear();
+      const m = String(day.getMonth() + 1).padStart(2, '0');
+      const dt = String(day.getDate()).padStart(2, '0');
+      return {
+        dateObj: day,
+        dateStr: `${y}-${m}-${dt}`,
+        dayNum: day.getDate(),
+        dayOfWeekIndex: day.getDay(),
+        monthName: monthNames[day.getMonth()]
+      };
+    });
+  }, [currentDate]);
 
   // Dias ativos configuráveis pelo atleta (dom=0, seg=1, ter=2, qua=3, qui=4, sex=5, sab=6)
   // Padrão do usuário: Segunda(1), Quarta(3), Sexta(5) OU o que vier em runnerState.preferredDaysOfWeek
@@ -195,7 +230,7 @@ export const AdaptationCalendar: React.FC<AdaptationCalendarProps> = ({
   return (
     <div className="telemetry-card rounded-2xl p-5 sm:p-6 border border-white/10 space-y-6">
       
-      {/* Header with Title and Month Controls */}
+      {/* Header with Title, View Toggle and Navigation Controls */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-white/10 pb-4">
         <div>
           <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold uppercase tracking-wider font-mono-data mb-1">
@@ -203,38 +238,67 @@ export const AdaptationCalendar: React.FC<AdaptationCalendarProps> = ({
             <span>Calendário Oficial de Adaptação Musculoesquelética</span>
           </div>
           <h3 className="text-xl sm:text-2xl font-extrabold text-white font-heading">
-            {monthNames[month]} {year}
+            {viewMode === 'week' 
+              ? `Semana de ${weekDays[0].dayNum} a ${weekDays[6].dayNum} de ${weekDays[0].monthName} ${year}` 
+              : `${monthNames[month]} ${year}`}
           </h3>
           <p className="text-xs text-slate-400 mt-0.5">
-            Dias de estímulo alternados (Ter, Qui, Sáb) intercalados com regeneração de tendões e fáscias.
+            Dias de estímulo alternados intercalados com proteção de cartilagens e fáscias musculares.
           </p>
         </div>
 
-        <div className="flex items-center gap-2 self-end sm:self-auto">
+        <div className="flex flex-wrap items-center gap-2 self-end sm:self-auto">
+          {/* View Mode Toggle: Semana vs Mês */}
+          <div className="flex items-center p-1 bg-white/5 border border-white/10 rounded-xl mr-1">
+            <button
+              type="button"
+              onClick={() => setViewMode('week')}
+              className={`px-3 py-1 rounded-lg text-xs font-bold font-mono-data transition-all cursor-pointer ${
+                viewMode === 'week'
+                  ? 'bg-emerald-500 text-black shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Semana
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('month')}
+              className={`px-3 py-1 rounded-lg text-xs font-bold font-mono-data transition-all cursor-pointer ${
+                viewMode === 'month'
+                  ? 'bg-emerald-500 text-black shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Mês
+            </button>
+          </div>
+
           <button
-            onClick={handlePrevMonth}
+            onClick={handlePrev}
             className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 transition-colors cursor-pointer"
-            title="Mês Anterior"
+            title={viewMode === 'week' ? 'Semana Anterior' : 'Mês Anterior'}
           >
             <ChevronLeft className="w-5 h-5" />
           </button>
           <button
-            onClick={() => setCurrentDate(new Date())}
+            onClick={() => {
+              setCurrentDate(new Date());
+              setSelectedDateStr(new Date().toISOString().split('T')[0]);
+            }}
             className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold text-slate-300 font-mono-data transition-colors cursor-pointer"
           >
             Hoje
           </button>
           <button
-            onClick={handleNextMonth}
+            onClick={handleNext}
             className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 transition-colors cursor-pointer"
-            title="Próximo Mês"
+            title={viewMode === 'week' ? 'Próxima Semana' : 'Próximo Mês'}
           >
             <ChevronRight className="w-5 h-5" />
           </button>
         </div>
       </div>
-
-
 
       {/* Interactive Preferred Days of Week Selector */}
       <div className="p-4 rounded-xl bg-[#0B0F0D] border border-emerald-500/25 flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -278,76 +342,152 @@ export const AdaptationCalendar: React.FC<AdaptationCalendarProps> = ({
         </div>
       </div>
 
-      {/* Main Grid: Days of Week and Days */}
-      <div>
-        {/* Days of week header */}
-        <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-2 text-center text-xs font-bold font-mono-data text-slate-400">
-          {daysOfWeek.map((dow, idx) => (
-            <div key={idx} className={`py-1.5 ${idx === 0 || idx === 6 ? 'text-slate-500' : 'text-slate-300'}`}>
-              {dow}
-            </div>
-          ))}
+      {/* MAIN GRID: WEEK VIEW (Default) OR MONTH VIEW */}
+      {viewMode === 'week' ? (
+        /* VISÃO SEMANAL DE 7 DIAS */
+        <div className="space-y-2">
+          <div className="grid grid-cols-1 sm:grid-cols-7 gap-2.5">
+            {weekDays.map((day) => {
+              const dateStr = day.dateStr;
+              const isToday = new Date().toISOString().split('T')[0] === dateStr;
+              const isSelected = selectedDateStr === dateStr;
+              const session = getSessionForDate(dateStr);
+              const isDone = completedDates[dateStr] || false;
+              const dayName = daysOfWeek[day.dayOfWeekIndex];
+
+              return (
+                <div
+                  key={dateStr}
+                  onClick={() => setSelectedDateStr(dateStr)}
+                  className={`p-3.5 rounded-2xl border transition-all flex flex-col justify-between cursor-pointer min-h-[110px] ${
+                    isSelected
+                      ? 'border-emerald-400 bg-emerald-950/40 shadow-lg shadow-emerald-500/20 ring-1 ring-emerald-500/50'
+                      : isToday
+                      ? 'border-[#FF4E00]/60 bg-[#FF4E00]/10'
+                      : session.isWorkout
+                      ? 'border-white/10 bg-[#0E1512] hover:border-emerald-500/40'
+                      : 'border-white/5 bg-[#0A0A0A] hover:border-white/20 opacity-75'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold font-mono-data text-slate-400 block">
+                        {dayName}
+                      </span>
+                      <span className={`text-base font-black font-mono-data ${
+                        isToday ? 'text-[#FF4E00]' : isSelected ? 'text-emerald-300' : 'text-white'
+                      }`}>
+                        {day.dayNum}
+                      </span>
+                    </div>
+
+                    {isDone ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    ) : session.isWorkout ? (
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50" />
+                    ) : (
+                      <span className="text-[10px] text-slate-600 font-mono-data">OFF</span>
+                    )}
+                  </div>
+
+                  <div className="pt-2 border-t border-white/5">
+                    {session.isWorkout ? (
+                      <div className="space-y-0.5">
+                        <span className="text-[11px] font-bold text-emerald-400 truncate block font-heading">
+                          🏃 {session.duration}
+                        </span>
+                        <span className="text-[9px] text-slate-400 line-clamp-1">
+                          {session.badge}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="space-y-0.5">
+                        <span className="text-[11px] font-semibold text-slate-500 truncate block">
+                          🛡️ Descanso
+                        </span>
+                        <span className="text-[9px] text-slate-600 line-clamp-1">
+                          Proteção Articular
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
-
-        {/* Days Grid */}
-        <div className="grid grid-cols-7 gap-1 sm:gap-2">
-          {/* Empty cells for offset */}
-          {Array.from({ length: firstDayIndex }).map((_, idx) => (
-            <div key={`empty-${idx}`} className="h-16 sm:h-20 rounded-xl bg-white/[0.01] border border-transparent" />
-          ))}
-
-          {/* Actual days */}
-          {Array.from({ length: totalDaysInMonth }).map((_, idx) => {
-            const dayNum = idx + 1;
-            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
-            const isToday = new Date().toISOString().split('T')[0] === dateStr;
-            const isSelected = selectedDateStr === dateStr;
-            const session = getSessionForDate(dateStr);
-            const isDone = completedDates[dateStr] || false;
-
-            return (
-              <div
-                key={dateStr}
-                onClick={() => setSelectedDateStr(dateStr)}
-                className={`h-16 sm:h-20 p-1.5 sm:p-2 rounded-xl border transition-all flex flex-col justify-between cursor-pointer ${
-                  isSelected
-                    ? 'border-emerald-400 bg-emerald-950/30 shadow-md shadow-emerald-500/20'
-                    : isToday
-                    ? 'border-[#FF4E00]/60 bg-[#FF4E00]/5'
-                    : 'border-white/5 bg-[#0A0A0A] hover:border-white/20 hover:bg-[#121214]'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className={`text-xs font-bold font-mono-data ${
-                    isToday ? 'text-[#FF4E00]' : isSelected ? 'text-emerald-300' : 'text-slate-300'
-                  }`}>
-                    {dayNum}
-                  </span>
-
-                  {isDone ? (
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                  ) : session.isWorkout ? (
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50" />
-                  ) : null}
-                </div>
-
-                {/* Day content badge */}
-                <div className="truncate">
-                  {session.isWorkout ? (
-                    <span className="text-[9px] sm:text-[10px] font-bold text-emerald-400 truncate block font-heading">
-                      🏃 {session.duration}
-                    </span>
-                  ) : (
-                    <span className="text-[9px] sm:text-[10px] text-slate-500 truncate block">
-                      🛡️ Descanso
-                    </span>
-                  )}
-                </div>
+      ) : (
+        /* VISÃO MENSAL */
+        <div>
+          {/* Days of week header */}
+          <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-2 text-center text-xs font-bold font-mono-data text-slate-400">
+            {daysOfWeek.map((dow, idx) => (
+              <div key={idx} className={`py-1.5 ${idx === 0 || idx === 6 ? 'text-slate-500' : 'text-slate-300'}`}>
+                {dow}
               </div>
-            );
-          })}
+            ))}
+          </div>
+
+          {/* Days Grid */}
+          <div className="grid grid-cols-7 gap-1 sm:gap-2">
+            {/* Empty cells for offset */}
+            {Array.from({ length: firstDayIndex }).map((_, idx) => (
+              <div key={`empty-${idx}`} className="h-16 sm:h-20 rounded-xl bg-white/[0.01] border border-transparent" />
+            ))}
+
+            {/* Actual days */}
+            {Array.from({ length: totalDaysInMonth }).map((_, idx) => {
+              const dayNum = idx + 1;
+              const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+              const isToday = new Date().toISOString().split('T')[0] === dateStr;
+              const isSelected = selectedDateStr === dateStr;
+              const session = getSessionForDate(dateStr);
+              const isDone = completedDates[dateStr] || false;
+
+              return (
+                <div
+                  key={dateStr}
+                  onClick={() => setSelectedDateStr(dateStr)}
+                  className={`h-16 sm:h-20 p-1.5 sm:p-2 rounded-xl border transition-all flex flex-col justify-between cursor-pointer ${
+                    isSelected
+                      ? 'border-emerald-400 bg-emerald-950/30 shadow-md shadow-emerald-500/20'
+                      : isToday
+                      ? 'border-[#FF4E00]/60 bg-[#FF4E00]/5'
+                      : 'border-white/5 bg-[#0A0A0A] hover:border-white/20 hover:bg-[#121214]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className={`text-xs font-bold font-mono-data ${
+                      isToday ? 'text-[#FF4E00]' : isSelected ? 'text-emerald-300' : 'text-slate-300'
+                    }`}>
+                      {dayNum}
+                    </span>
+
+                    {isDone ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    ) : session.isWorkout ? (
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50" />
+                    ) : null}
+                  </div>
+
+                  {/* Day content badge */}
+                  <div className="truncate">
+                    {session.isWorkout ? (
+                      <span className="text-[9px] sm:text-[10px] font-bold text-emerald-400 truncate block font-heading">
+                        🏃 {session.duration}
+                      </span>
+                    ) : (
+                      <span className="text-[9px] sm:text-[10px] text-slate-500 truncate block">
+                        🛡️ Descanso
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Selected Day Action Card */}
       <div className="p-5 rounded-2xl bg-gradient-to-r from-[#0E1A14] via-[#0A0A0A] to-[#121214] border border-emerald-500/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">

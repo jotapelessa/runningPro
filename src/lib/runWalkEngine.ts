@@ -175,7 +175,7 @@ export function generateRunWalkPlan(
       phase: cfg.phase,
       phaseCode: 'base',
       focus: cfg.focus,
-      totalKm: cfg.estimatedVolumeKm * (trainingDaysPerWeek <= 3 ? 3 : 4),
+      totalKm: Math.round(cfg.estimatedVolumeKm * (trainingDaysPerWeek <= 3 ? 3 : 4) * 10) / 10,
       targetTss: 40 + (cfg.weekNumber * 5),
       days
     };

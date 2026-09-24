@@ -24,13 +24,15 @@ import {
   Award,
   ChevronRight,
   ShieldCheck,
-  UserCheck
+  UserCheck,
+  UploadCloud
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { UserActivity, ActivityFilter, RunnerState } from '../types';
 import { 
   deduplicateOrMergeActivity 
 } from '../lib/activitiesStorage';
+import { parseUniversalWorkoutFile } from '../lib/workoutParser';
 import { ActivityDetailModal } from './ActivityDetailModal';
 import { ManualActivityModal } from './ManualActivityModal';
 import { formatPace, formatTime } from '../lib/vdotCalculator';
@@ -52,6 +54,10 @@ export const ActivitiesTab: React.FC<ActivitiesTabProps> = ({
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [syncFeedback, setSyncFeedback] = useState<{ message: string; type: 'success' | 'info' } | null>(null);
 
+  // File upload state for direct activity GPX / FIT enrichment
+  const [uploadingActivityId, setUploadingActivityId] = useState<string | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
   // Filters & Modal State
   const [filters, setFilters] = useState<ActivityFilter>({
     type: 'all',
@@ -61,6 +67,60 @@ export const ActivitiesTab: React.FC<ActivitiesTabProps> = ({
   });
   const [selectedActivity, setSelectedActivity] = useState<UserActivity | null>(null);
   const [isManualModalOpen, setIsManualModalOpen] = useState<boolean>(false);
+
+  // Handle direct GPS / FIT upload for an individual activity
+  const handleUploadGpsForActivity = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !uploadingActivityId) return;
+
+    try {
+      const parsed = await parseUniversalWorkoutFile(file);
+      
+      const updatedList: UserActivity[] = activities.map(act => {
+        if (act.id !== uploadingActivityId) return act;
+
+        const newRoute = parsed.routePoints && parsed.routePoints.length >= 2 
+          ? parsed.routePoints.map(p => ({
+              lat: p.lat,
+              lng: p.lng,
+              ele: p.ele,
+              time: p.time,
+              hr: p.hr,
+              speed: p.speed
+            }))
+          : act.route;
+
+        return {
+          ...act,
+          route: newRoute,
+          splits: (parsed.splits as any) || act.splits,
+          elevationGainMeters: parsed.elevationGainMeters || act.elevationGainMeters,
+          cadenceSpm: parsed.avgCadence ?? act.cadenceSpm,
+          avgHr: parsed.avgHR ?? act.avgHr,
+          maxHr: parsed.maxHR ?? act.maxHr,
+          vdot: parsed.vdot || act.vdot,
+          notes: act.notes 
+            ? `${act.notes} • GPS anexado: ${file.name}` 
+            : `Arquivo GPS anexado: ${file.name}`
+        };
+      });
+
+      onUpdateActivities(updatedList);
+      confetti({ particleCount: 40, spread: 50, origin: { y: 0.6 } });
+      setSyncFeedback({
+        message: `Arquivo "${file.name}" anexado com sucesso à atividade! Rota GPS e métricas atualizadas.`,
+        type: 'success'
+      });
+    } catch (err: any) {
+      alert(`Erro ao ler arquivo: ${err.message || err}`);
+    } finally {
+      setUploadingActivityId(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      setTimeout(() => setSyncFeedback(null), 5000);
+    }
+  };
 
   // Trigger Intervals.icu Sync
   const handleSyncIntervals = async () => {
@@ -499,8 +559,22 @@ export const ActivitiesTab: React.FC<ActivitiesTabProps> = ({
                     </span>
                   </div>
 
-                  {/* Open HUD Button */}
-                  <div className="flex items-center gap-1">
+                  {/* Open HUD & Upload Buttons */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setUploadingActivityId(act.id);
+                        fileInputRef.current?.click();
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-emerald-500/20 text-slate-400 hover:text-emerald-400 border border-white/10 hover:border-emerald-500/40 text-[11px] font-bold font-sans transition-all cursor-pointer"
+                      title="Anexar arquivo .GPX, .FIT ou .TCX para enriquecer com rota e parciais"
+                    >
+                      <UploadCloud className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Anexar GPS</span>
+                    </button>
+
                     <span className="hidden sm:inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#121214] group-hover:bg-[#FF4E00] text-slate-300 group-hover:text-white text-xs font-bold font-sans transition-all">
                       Abrir HUD
                       <ChevronRight className="w-3.5 h-3.5" />
@@ -558,6 +632,15 @@ export const ActivitiesTab: React.FC<ActivitiesTabProps> = ({
         onClose={() => setIsManualModalOpen(false)}
         onSaveActivity={handleSaveManualActivity}
         availableShoes={runnerState.shoes || []}
+      />
+
+      {/* Hidden file input for direct activity GPX/FIT upload */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleUploadGpsForActivity}
+        accept=".gpx,.fit,.tcx"
+        className="hidden"
       />
     </div>
   );

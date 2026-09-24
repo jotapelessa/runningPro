@@ -23,6 +23,7 @@ import { generateEightWeekPlan } from '../lib/planGenerator';
 import { generateRunWalkPlan, RUN_WALK_SCHEDULE } from '../lib/runWalkEngine';
 import { parseUniversalWorkoutFile } from '../lib/workoutParser';
 import { reconcilePlanWithActivities } from '../lib/planReconciler';
+import { deduplicateOrMergeActivity } from '../lib/activitiesStorage';
 import { LiveRunWalkModal } from './LiveRunWalkModal';
 import { AdaptationCalendar } from './AdaptationCalendar';
 
@@ -135,17 +136,70 @@ export const TrainingPlanTab: React.FC<TrainingPlanTabProps> = ({
   };
 
   const [reconcileNotice, setReconcileNotice] = useState<string | null>(null);
+  const [isReconciling, setIsReconciling] = useState<boolean>(false);
 
-  // Reconcile Plan with Activities
-  const handleReconcileActivities = () => {
-    if (!activities || activities.length === 0) {
-      setReconcileNotice('Nenhuma atividade recente sincronizada do Intervals.icu encontrada.');
-      setTimeout(() => setReconcileNotice(null), 4000);
+  // Reconcile Plan with Activities (fetches latest from Intervals.icu if key is set)
+  const handleReconcileActivities = async () => {
+    setIsReconciling(true);
+    setReconcileNotice(null);
+
+    let currentActivitiesList = activities || [];
+
+    // Se houver API Key do Intervals.icu, tenta puxar os treinos mais recentes primeiro
+    if (runnerState.intervalsApiKey) {
+      try {
+        const { fetchIntervalsActivities, mapIntervalsToUserActivity } = await import('../lib/intervalsIcu');
+        const now = new Date();
+        const newestDate = new Date(now);
+        newestDate.setDate(newestDate.getDate() + 1);
+        const oldestDate = new Date(now);
+        oldestDate.setDate(oldestDate.getDate() - 30);
+
+        const formatLocalISO = (d: Date) => {
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          return `${y}-${m}-${day}T23:59:59`;
+        };
+
+        const newest = formatLocalISO(newestDate);
+        const oldest = formatLocalISO(oldestDate);
+
+        const rawIntervals = await fetchIntervalsActivities(
+          runnerState.intervalsAthleteId || '',
+          runnerState.intervalsApiKey,
+          oldest,
+          newest
+        );
+
+        if (rawIntervals && rawIntervals.length > 0) {
+          const mapped = rawIntervals.map(mapIntervalsToUserActivity);
+          // Deduplica com as atividades existentes
+          let mergedList = [...currentActivitiesList];
+          mapped.forEach(act => {
+            const res = deduplicateOrMergeActivity(mergedList, act);
+            mergedList = res.updatedList;
+          });
+          currentActivitiesList = mergedList;
+          if (onUpdateActivities) {
+            onUpdateActivities(mergedList);
+          }
+        }
+      } catch (err: any) {
+        console.warn('Não foi possível sincronizar diretamente com o Intervals.icu, utilizando dados locais:', err);
+      }
+    }
+
+    if (!currentActivitiesList || currentActivitiesList.length === 0) {
+      setIsReconciling(false);
+      setReconcileNotice('Nenhuma atividade recente sincronizada do Intervals.icu encontrada. Configure a API Key no Perfil do Atleta.');
+      setTimeout(() => setReconcileNotice(null), 5000);
       return;
     }
 
-    const result = reconcilePlanWithActivities(currentPlan, activities);
+    const result = reconcilePlanWithActivities(currentPlan, currentActivitiesList);
     onUpdatePlan(result.updatedPlan);
+    setIsReconciling(false);
 
     if (result.matchedCount > 0) {
       confetti({ particleCount: 50, spread: 50, origin: { y: 0.6 } });
@@ -512,11 +566,16 @@ export const TrainingPlanTab: React.FC<TrainingPlanTabProps> = ({
             <button
               id="btn-reconcile-intervals"
               onClick={handleReconcileActivities}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 font-bold text-xs font-mono-data uppercase transition-all shadow-md cursor-pointer"
+              disabled={isReconciling}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-xs font-mono-data uppercase transition-all shadow-md cursor-pointer ${
+                isReconciling
+                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 cursor-wait'
+                  : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40'
+              }`}
               title="Sincronizar e dar baixa automática nos treinos do plano usando atividades do Intervals.icu ou arquivos importados"
             >
-              <Activity className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Sincronizar Intervals.icu</span>
+              <Activity className={`w-3.5 h-3.5 text-emerald-400 ${isReconciling ? 'animate-spin' : ''}`} />
+              <span>{isReconciling ? 'Sincronizando...' : 'Sincronizar Intervals.icu'}</span>
             </button>
 
             <button
@@ -674,7 +733,7 @@ export const TrainingPlanTab: React.FC<TrainingPlanTabProps> = ({
                 )}
               </div>
               <div className="text-[10px] font-mono-data truncate text-[#FF4E00]">
-                {w.totalKm} km • {w.targetTss} TSS
+                {(Number(w.totalKm) || 0).toFixed(1)} km • {w.targetTss} TSS
               </div>
             </button>
           );
