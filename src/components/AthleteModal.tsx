@@ -85,16 +85,8 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
   const [isTestingIntervals, setIsTestingIntervals] = useState<boolean>(false);
   const [intervalsTestResult, setIntervalsTestResult] = useState<'success' | 'error' | null>(null);
 
-  // Multi-File Upload State (.GPX, .TCX, .FIT simultaneously)
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isDragging, setIsDragging] = useState<boolean>(false);
-  const [isUploading, setIsUploading] = useState<boolean>(false);
-  const [uploadErrors, setUploadErrors] = useState<string[]>([]);
-  const [uploadedWorkouts, setUploadedWorkouts] = useState<ParsedWorkout[]>([]);
-  const [multiSummary, setMultiSummary] = useState<MultiWorkoutTelemetrySummary | null>(null);
-
   // Manual VDOT / Test section
-  const [hasRecentRace, setHasRecentRace] = useState<boolean>(!isCurrentlySedentary && uploadedWorkouts.length === 0);
+  const [hasRecentRace, setHasRecentRace] = useState<boolean>(!isCurrentlySedentary);
   const [raceDistance, setRaceDistance] = useState<DistanceType>('5k');
   const [raceHours, setRaceHours] = useState<number>(0);
   const [raceMinutes, setRaceMinutes] = useState<number>(24);
@@ -161,111 +153,9 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
     document.body.removeChild(link);
   };
 
-  // Process selected or dropped files (supports 1 or multiple files simultaneously)
-  const handleFilesSelected = async (files: FileList | File[]) => {
-    if (!files || files.length === 0) return;
-
-    setIsUploading(true);
-    setUploadErrors([]);
-
-    try {
-      const { parsedWorkouts: newParsed, errors } = await parseMultipleWorkoutFiles(files);
-      
-      if (errors.length > 0) {
-        setUploadErrors(errors);
-      }
-
-      if (newParsed.length > 0) {
-        // Merge with existing workouts avoiding duplicate file names with same distance
-        const combined = [...uploadedWorkouts];
-        for (const np of newParsed) {
-          const exists = combined.some(w => w.fileName === np.fileName && Math.abs(w.distanceMeters - np.distanceMeters) < 5);
-          if (!exists) {
-            combined.push(np);
-          }
-        }
-
-        setUploadedWorkouts(combined);
-        const summary = aggregateWorkoutTelemetry(combined);
-        setMultiSummary(summary);
-        setManualVdot(summary.compositeVdot || summary.bestVdot);
-
-        if (summary.maxHrOverall && summary.maxHrOverall > 120) {
-          setMaxHR(summary.maxHrOverall);
-        }
-        if (summary.avgHrOverall && summary.avgHrOverall < restHR && summary.avgHrOverall > 40) {
-          setRestHR(summary.avgHrOverall);
-        }
-        if (summary.detectedWeeklyVolumeKm > 0) {
-          setWeeklyVolume(summary.detectedWeeklyVolumeKm);
-        }
-        if (summary.detectedTrainingDays > 0) {
-          setTrainingDays(summary.detectedTrainingDays);
-        }
-        if (summary.detectedWeeksSpan && summary.detectedWeeksSpan > 1) {
-          setWeeksActive(Math.max(weeksActive, Math.round(summary.detectedWeeksSpan * 2)));
-        }
-
-        setHasRecentRace(false); // Telemetry takes precedence
-      }
-    } catch (err: any) {
-      console.error('Error parsing workout files in modal:', err);
-      setUploadErrors([err.message || 'Erro ao processar arquivos (.GPX, .TCX ou .FIT).']);
-    } finally {
-      setIsUploading(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-    }
-  };
-
-  const handleRemoveWorkout = (indexToRemove: number) => {
-    const updated = uploadedWorkouts.filter((_, idx) => idx !== indexToRemove);
-    setUploadedWorkouts(updated);
-    if (updated.length > 0) {
-      const summary = aggregateWorkoutTelemetry(updated);
-      setMultiSummary(summary);
-      setManualVdot(summary.compositeVdot || summary.bestVdot);
-    } else {
-      setMultiSummary(null);
-    }
-  };
-
-  const handleClearAllWorkouts = () => {
-    setUploadedWorkouts([]);
-    setMultiSummary(null);
-    setUploadErrors([]);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
-  // Drag & drop handlers
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = () => {
-    setIsDragging(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleFilesSelected(e.dataTransfer.files);
-    }
-  };
 
   // Compute calculated VDOT
   const effectiveVdot = useMemo(() => {
-    if (multiSummary && multiSummary.compositeVdot > 0) {
-      return multiSummary.compositeVdot;
-    }
-    if (uploadedWorkouts.length > 0 && uploadedWorkouts[0].vdot > 0) {
-      return uploadedWorkouts[0].vdot;
-    }
     if (hasRecentRace) {
       const distanceMetersMap: Record<DistanceType, number> = {
         '400m': 400,
@@ -292,7 +182,7 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
       }
     }
     return manualVdot > 0 ? manualVdot : (activityProfile === 'sedentary' ? 28.0 : 40.0);
-  }, [multiSummary, uploadedWorkouts, hasRecentRace, raceDistance, raceHours, raceMinutes, raceSeconds, manualVdot, activityProfile]);
+  }, [hasRecentRace, raceDistance, raceHours, raceMinutes, raceSeconds, manualVdot, activityProfile]);
 
   // Compute multi-factor athlete prescription on the fly
   const prescription = useMemo(() => {
@@ -310,7 +200,7 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
         heightCm,
         height: heightCm,
         level: currentMappedLevel,
-        weeksActive: activityProfile === 'sedentary' ? 0 : (multiSummary?.detectedWeeksSpan ? Math.round(multiSummary.detectedWeeksSpan) : weeksActive),
+        weeksActive: activityProfile === 'sedentary' ? 0 : weeksActive,
         trainingDays,
         weeklyVolume,
         macHR: maxHR,
@@ -320,9 +210,9 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
         currentVdot: effectiveVdot,
         injuries,
       },
-      multiSummary || (uploadedWorkouts.length > 0 ? uploadedWorkouts[0] : null)
+      null
     );
-  }, [name, age, gender, weight, heightCm, activityProfile, weeksActive, trainingDays, weeklyVolume, maxHR, restHR, effectiveVdot, injuries, multiSummary, uploadedWorkouts]);
+  }, [name, age, gender, weight, heightCm, activityProfile, weeksActive, trainingDays, weeklyVolume, maxHR, restHR, effectiveVdot, injuries]);
 
   // Handle Save
   const handleSave = () => {
@@ -332,11 +222,7 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
       ? 'beginner' 
       : activityProfile === 'advanced' ? 'advanced' : 'intermediate';
 
-    const formatCountStr = multiSummary 
-      ? `${multiSummary.totalWorkouts} Arquivos (${multiSummary.formatCounts.fit} FIT, ${multiSummary.formatCounts.gpx} GPX, ${multiSummary.formatCounts.tcx} TCX)`
-      : uploadedWorkouts.length === 1 
-      ? `Arquivo: ${uploadedWorkouts[0].fileName}`
-      : 'Ficha do Atleta';
+    const formatCountStr = 'Ficha do Atleta';
 
 
     const updatedState: Partial<RunnerState> = {
@@ -367,22 +253,6 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
       intervalsApiKey,
     };
 
-    if (multiSummary) {
-      if (multiSummary.avgCadenceOverall) {
-        updatedState.cadenceSpm = multiSummary.avgCadenceOverall;
-      }
-      if (onWorkoutUploaded) {
-        onWorkoutUploaded(multiSummary.bestVdotWorkout || uploadedWorkouts[0]);
-      }
-    } else if (uploadedWorkouts.length === 1) {
-      if (uploadedWorkouts[0].avgCadence) {
-        updatedState.cadenceSpm = uploadedWorkouts[0].avgCadence;
-      }
-      if (onWorkoutUploaded) {
-        onWorkoutUploaded(uploadedWorkouts[0]);
-      }
-    }
-
     onSave(updatedState);
     onClose();
   };
@@ -409,7 +279,7 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Configure biometria, sedentarismo, rotina e carregue arquivos .GPX, .TCX ou .FIT para diagnóstico exato.
+                Configure biometria, sedentarismo, rotina e avalie seu diagnóstico exato.
               </p>
             </div>
           </div>
@@ -424,12 +294,12 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
+        <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-6">
           {/* Section 1: Biometria & Identificação */}
           <div className="space-y-3">
             <h4 className="text-xs font-bold text-[#FF4E00] uppercase tracking-wider flex items-center gap-1.5 font-heading">
               <User className="w-3.5 h-3.5" />
-              1. Biometria & Composição Corporal
+              Biometria & Composição Corporal
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <div className="sm:col-span-2">
@@ -512,7 +382,7 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
           <div className="space-y-3 bg-[#121214] p-4 rounded-xl border border-white/10">
             <h4 className="text-xs font-bold text-[#FF4E00] uppercase tracking-wider flex items-center gap-1.5 font-heading">
               <Activity className="w-3.5 h-3.5" />
-              2. Nível de Atividade & Experiência de Corrida
+              Nível de Atividade & Experiência de Corrida
             </h4>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -594,7 +464,7 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
             <div className="flex items-center justify-between">
               <h4 className="text-xs font-bold text-[#FF4E00] uppercase tracking-wider flex items-center gap-1.5 font-heading">
                 <Heart className="w-3.5 h-3.5" />
-                3. Zonas Cardíacas (Karvonen HRR)
+                Zonas Cardíacas (Karvonen HRR)
               </h4>
               <button
                 type="button"
@@ -634,13 +504,12 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
           </div>
 
           {/* Section 4: VDOT Manual se não tiver arquivo carregado */}
-          {uploadedWorkouts.length === 0 && (
-            <div className="space-y-3 bg-[#121214] p-4 rounded-xl border border-white/10">
-              <div className="flex items-center justify-between">
-                <h4 className="text-xs font-bold text-[#FF4E00] uppercase tracking-wider flex items-center gap-1.5 font-heading">
-                  <Flame className="w-3.5 h-3.5" />
-                  4. Teste de Campo ou VDOT Manual
-                </h4>
+          <div className="space-y-3 bg-[#121214] p-4 rounded-xl border border-white/10">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold text-[#FF4E00] uppercase tracking-wider flex items-center gap-1.5 font-heading">
+                <Flame className="w-3.5 h-3.5" />
+                Teste de Campo ou VDOT Manual
+              </h4>
                 <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
                   <input
                     type="checkbox"
@@ -722,7 +591,6 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
                 </div>
               )}
             </div>
-          )}
 
           {/* Section 6: Integração Intervals.icu */}
           <div className="space-y-3">
@@ -784,7 +652,7 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
           <div className="space-y-3">
             <h4 className="text-xs font-bold text-[#FF4E00] uppercase tracking-wider flex items-center gap-1.5 font-heading">
               <Award className="w-3.5 h-3.5" />
-              5. Objetivo de Prova & Histórico de Dores / Lesões
+              Objetivo de Prova & Histórico de Dores / Lesões
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
